@@ -7,6 +7,7 @@ import com.iota.iri.controllers.TransactionViewModel;
 import com.iota.iri.network.Node;
 import com.iota.iri.network.TransactionRequester;
 import com.iota.iri.network.UDPReceiver;
+import com.iota.iri.network.gossip.Gossip;
 import com.iota.iri.network.impl.TransactionRequesterWorkerImpl;
 import com.iota.iri.network.replicator.Replicator;
 import com.iota.iri.service.TipsSolidifier;
@@ -101,9 +102,10 @@ public class Iota {
     public final TransactionValidator transactionValidator;
     public final TipsSolidifier tipsSolidifier;
     public final TransactionRequester transactionRequester;
-    public final Node node;
-    public final UDPReceiver udpReceiver;
-    public final Replicator replicator;
+    //public final Node node;
+    public final Gossip gossip;
+    //public final UDPReceiver udpReceiver;
+    //public final Replicator replicator;
     public final IotaConfig configuration;
     public final TipsViewModel tipsViewModel;
     public final MessageQ messageQ;
@@ -145,10 +147,11 @@ public class Iota {
         tipsViewModel = new TipsViewModel();
         transactionRequester = new TransactionRequester(tangle, snapshotProvider, messageQ);
         transactionValidator = new TransactionValidator(tangle, snapshotProvider, tipsViewModel, transactionRequester);
-        node = new Node(tangle, snapshotProvider, transactionValidator, transactionRequester, tipsViewModel,
-                latestMilestoneTracker, messageQ, configuration);
-        replicator = new Replicator(node, configuration);
-        udpReceiver = new UDPReceiver(node, configuration);
+        //node = new Node(tangle, snapshotProvider, transactionValidator, transactionRequester, tipsViewModel,
+        //        latestMilestoneTracker, messageQ, configuration);
+        gossip = new Gossip(configuration, transactionValidator, tangle, snapshotProvider, transactionRequester, tipsViewModel, latestMilestoneTracker);
+        // replicator = new Replicator(node, configuration);
+        // udpReceiver = new UDPReceiver(node, configuration);
         tipsSolidifier = new TipsSolidifier(tangle, transactionValidator, tipsViewModel, configuration);
         tipsSelector = createTipSelector(configuration);
 
@@ -180,9 +183,10 @@ public class Iota {
         transactionValidator.init(configuration.isTestnet(), configuration.getMwm());
         tipsSolidifier.init();
         transactionRequester.init(configuration.getpRemoveRequest());
-        udpReceiver.init();
-        replicator.init();
-        node.init();
+        //udpReceiver.init();
+        //replicator.init();
+        Thread gossipThread = new Thread(gossip);
+        gossipThread.start();
 
         latestMilestoneTracker.start();
         latestSolidMilestoneTracker.start();
@@ -220,7 +224,7 @@ public class Iota {
         if (transactionPruner != null) {
             transactionPruner.init(tangle, snapshotProvider, spentAddressesService, tipsViewModel, configuration);
         }
-        transactionRequesterWorker.init(tangle, transactionRequester, tipsViewModel, node);
+        transactionRequesterWorker.init(tangle, transactionRequester, tipsViewModel, gossip);
     }
 
     private void rescanDb() throws Exception {
@@ -268,9 +272,9 @@ public class Iota {
         }
 
         tipsSolidifier.shutdown();
-        node.shutdown();
-        udpReceiver.shutdown();
-        replicator.shutdown();
+        gossip.shutdown();
+        //udpReceiver.shutdown();
+        //replicator.shutdown();
         transactionValidator.shutdown();
         tangle.shutdown();
         messageQ.shutdown();

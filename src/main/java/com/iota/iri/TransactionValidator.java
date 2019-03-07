@@ -416,6 +416,7 @@ public class TransactionValidator {
             boolean solid = true;
             if (!checkApproovee(transactionViewModel.getTrunkTransaction(tangle))) {
                 solid = false;
+                return false;
             }
             if (!checkApproovee(transactionViewModel.getBranchTransaction(tangle))) {
                 solid = false;

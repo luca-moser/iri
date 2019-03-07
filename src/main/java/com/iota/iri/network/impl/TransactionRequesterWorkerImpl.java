@@ -7,6 +7,8 @@ import com.iota.iri.network.Neighbor;
 import com.iota.iri.network.Node;
 import com.iota.iri.network.TransactionRequester;
 import com.iota.iri.network.TransactionRequesterWorker;
+import com.iota.iri.network.gossip.Gossip;
+import com.iota.iri.network.gossip.Peer;
 import com.iota.iri.storage.Tangle;
 import com.iota.iri.utils.thread.DedicatedScheduledExecutorService;
 import com.iota.iri.utils.thread.SilentScheduledExecutorService;
@@ -60,7 +62,7 @@ public class TransactionRequesterWorkerImpl implements TransactionRequesterWorke
     /**
      * The network manager of the node.<br />
      */
-    private Node node;
+    private Gossip gossip;
 
     /**
      * The manager of the background task.<br />
@@ -83,16 +85,16 @@ public class TransactionRequesterWorkerImpl implements TransactionRequesterWorke
      * @param tangle Tangle object which acts as a database interface
      * @param transactionRequester manager for the requested transactions
      * @param tipsViewModel the manager for the tips
-     * @param node the network manager of the node
+     * @param gossip the network manager of the node
      * @return the initialized instance itself to allow chaining
      */
     public TransactionRequesterWorkerImpl init(Tangle tangle, TransactionRequester transactionRequester,
-            TipsViewModel tipsViewModel, Node node) {
+            TipsViewModel tipsViewModel, Gossip gossip) {
 
         this.tangle = tangle;
         this.transactionRequester = transactionRequester;
         this.tipsViewModel = tipsViewModel;
-        this.node = node;
+        this.gossip = gossip;
 
         return this;
     }
@@ -121,10 +123,10 @@ public class TransactionRequesterWorkerImpl implements TransactionRequesterWorke
     }
 
     private void sendToNodes(TransactionViewModel transaction) {
-        for (Neighbor neighbor : node.getNeighbors()) {
+        for (Peer peer : gossip.getPeers().values()) {
             try {
                 // automatically adds the hash of a requested transaction when sending a packet
-                node.sendPacket(transaction, neighbor);
+                gossip.sendPacket(peer, transaction);
             } catch (Exception e) {
                 log.error("unexpected error while sending request to neighbour", e);
             }

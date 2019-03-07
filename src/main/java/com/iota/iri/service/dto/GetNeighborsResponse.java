@@ -1,7 +1,9 @@
 package com.iota.iri.service.dto;
 
+import java.util.Collection;
 import java.util.List;
 
+import com.iota.iri.network.gossip.Peer;
 import com.iota.iri.service.API;
 
 /**
@@ -43,13 +45,15 @@ public class GetNeighborsResponse extends AbstractResponse {
      * @param elements {@link com.iota.iri.network.Neighbor}
      * @return an {@link GetNeighborsResponse} filled all neighbors and their activity.
      */
-    public static AbstractResponse create(final List<com.iota.iri.network.Neighbor> elements) {
+    public static AbstractResponse create(final Collection<Peer> elements) {
         GetNeighborsResponse res = new GetNeighborsResponse();
-        res.neighbors = new Neighbor[elements.size()];
+        /*
+        res.neighbors = new Neighbor[eles.size()];
         int i = 0;
         for (com.iota.iri.network.Neighbor n : elements) {
             res.neighbors[i++] = Neighbor.createFrom(n);
         }
+        */
         return res;
     }
     
