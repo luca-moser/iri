@@ -26,17 +26,17 @@ public class PreProcessStage implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(Gossip.class);
 
     private ReadWriteLock cacheLock = new ReentrantReadWriteLock();
-    private HashMap<Long, Hash> recenltySeenCache = new HashMap<>();
+    private HashMap<Long, Hash> recentlySeenCache = new HashMap<>();
 
     private BlockingQueue<Pair<Peer, ByteBuffer>> preProcessStageQueue;
 
     // out
-    private BlockingQueue<Pair<Peer, Triple<byte[], Long, Hash>>> txValidationStageQueue;
+    private BlockingQueue<Triple<Peer, Triple<byte[], Long, Hash>, Boolean>> txValidationStageQueue;
     private BlockingQueue<Pair<Peer, Hash>> replyStageQueue;
 
     public PreProcessStage(
             BlockingQueue<Pair<Peer, ByteBuffer>> preProcessStageQueue,
-            BlockingQueue<Pair<Peer, Triple<byte[], Long, Hash>>> txValidationStageQueue,
+            BlockingQueue<Triple<Peer, Triple<byte[], Long, Hash>, Boolean>> txValidationStageQueue,
             BlockingQueue<Pair<Peer, Hash>> replyStageQueue) {
         this.preProcessStageQueue = preProcessStageQueue;
         this.txValidationStageQueue = txValidationStageQueue;
@@ -46,7 +46,6 @@ public class PreProcessStage implements Runnable {
     @Override
     public void run() {
         log.info("pre-process stage ready");
-
         while (!Gossip.SHUTDOWN.get()) {
             try {
                 Pair<Peer, ByteBuffer> tuple = preProcessStageQueue.poll(100, TimeUnit.MILLISECONDS);
@@ -68,7 +67,7 @@ public class PreProcessStage implements Runnable {
                 long txDigest = Gossip.getTxCacheDigest(txDataBytes);
 
                 cacheLock.readLock().lock();
-                Hash receivedTxHash = recenltySeenCache.get(txDigest);
+                Hash receivedTxHash = recentlySeenCache.get(txDigest);
                 cacheLock.readLock().unlock();
 
                 Hash requestedHash = HashFactory.TRANSACTION.create(reqHashBytes, 0, REQ_HASH_SIZE);
@@ -87,7 +86,7 @@ public class PreProcessStage implements Runnable {
 
                 // submit to validation stage.
                 // note that the validation stage takes care of submitting a payload to the reply stage.
-                txValidationStageQueue.put(new ImmutablePair<>(peer, new ImmutableTriple<>(txTrits, txDigest, requestedHash)));
+                txValidationStageQueue.put(new ImmutableTriple<>(peer, new ImmutableTriple<>(txTrits, txDigest, requestedHash), false));
             } catch (InterruptedException | NoSuchAlgorithmException e) {
                 e.printStackTrace();
             }
@@ -98,7 +97,7 @@ public class PreProcessStage implements Runnable {
     public void cacheHash(long dataDigest, Hash hash) {
         cacheLock.writeLock().lock();
         try {
-            recenltySeenCache.put(dataDigest, hash);
+            recentlySeenCache.put(dataDigest, hash);
         } finally {
             cacheLock.writeLock().unlock();
         }

@@ -4,6 +4,7 @@ import com.iota.iri.controllers.TransactionViewModel;
 import com.iota.iri.network.TransactionRequester;
 import com.iota.iri.service.milestone.LatestMilestoneTracker;
 import com.iota.iri.storage.Tangle;
+import com.iota.iri.utils.Converter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +42,7 @@ public class TipRequester implements Runnable {
                 if(msTVM.getBytes().length > 0){
                     gossip.getPeers().values().forEach(peer -> {
                         try {
-                            gossip.sendPacket(peer, msTVM);
+                            gossip.sendPacket(peer, msTVM, true);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }

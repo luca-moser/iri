@@ -1,6 +1,7 @@
 package com.iota.iri.network.gossip;
 
 import com.iota.iri.controllers.TransactionViewModel;
+import com.iota.iri.utils.Converter;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,7 +31,6 @@ public class BroadcastStage implements Runnable {
                 if (tuple == null) {
                     continue;
                 }
-
                 Peer originPeer = tuple.getLeft();
                 TransactionViewModel tvm = tuple.getRight();
 

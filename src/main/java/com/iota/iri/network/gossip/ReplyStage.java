@@ -8,6 +8,7 @@ import com.iota.iri.model.HashFactory;
 import com.iota.iri.network.TransactionRequester;
 import com.iota.iri.service.milestone.LatestMilestoneTracker;
 import com.iota.iri.storage.Tangle;
+import com.iota.iri.utils.Converter;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,7 +34,7 @@ public class ReplyStage implements Runnable {
     private BlockingQueue<Pair<Peer, Hash>> replyStageQueue;
 
     public ReplyStage(
-            ArrayBlockingQueue<Pair<Peer, Hash>> replyStageQueue,
+            BlockingQueue<Pair<Peer, Hash>> replyStageQueue,
             Gossip gossip, NodeConfig config, Tangle tangle,
             TipsViewModel tipsViewModel, LatestMilestoneTracker latestMilestoneTracker,
             PreProcessStage preProcessStage, TransactionRequester txRequester
@@ -66,7 +67,7 @@ public class ReplyStage implements Runnable {
                 if (requestedHash.equals(Hash.NULL_HASH)) {
                     try {
                         // retrieve random tx
-                        if (txRequester.numberOfTransactionsToRequest() <= 0 || rnd.nextDouble() >= config.getpReplyRandomTip()) {
+                        if (txRequester.numberOfTransactionsToRequest() == 0 || rnd.nextDouble() >= config.getpReplyRandomTip()) {
                             return;
                         }
                         transactionPointer = getRandomTipPointer();
@@ -86,6 +87,7 @@ public class ReplyStage implements Runnable {
                 if (tvm != null && tvm.getType() == TransactionViewModel.FILLED_SLOT) {
                     try {
                         // send the requested tx data to the requester
+                        log.info("replying tx {}", Converter.trytes(tvm.getHash().trits()));
                         gossip.sendPacket(peer, tvm);
                         // cache the replied with tx
                         long txDigest = Gossip.getTxCacheDigest(tvm.getBytes());

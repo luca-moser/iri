@@ -4,8 +4,10 @@ import com.iota.iri.TransactionValidator;
 import com.iota.iri.controllers.TransactionViewModel;
 import com.iota.iri.service.snapshot.SnapshotProvider;
 import com.iota.iri.storage.Tangle;
+import com.iota.iri.utils.Converter;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.tuple.Triple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,11 +21,11 @@ public class ReceivedStage implements Runnable {
     private Tangle tangle;
     private TransactionValidator txValidator;
     private SnapshotProvider snapshotProvider;
-    private BlockingQueue<Pair<Peer, TransactionViewModel>> receivedStageQueue;
+    private BlockingQueue<Triple<Peer, TransactionViewModel, Boolean>> receivedStageQueue;
     private BlockingQueue<Pair<Peer, TransactionViewModel>> broadcastStageQueue;
 
     public ReceivedStage(
-            BlockingQueue<Pair<Peer, TransactionViewModel>> receivedStageQueue,
+            BlockingQueue<Triple<Peer, TransactionViewModel, Boolean>> receivedStageQueue,
             BlockingQueue<Pair<Peer, TransactionViewModel>> broadcastStageQueue,
             Tangle tangle, TransactionValidator txValidator, SnapshotProvider snapshotProvider) {
         this.receivedStageQueue = receivedStageQueue;
@@ -36,15 +38,20 @@ public class ReceivedStage implements Runnable {
     @Override
     public void run() {
         log.info("received stage ready");
-
         while (!Gossip.SHUTDOWN.get()) {
             try {
-                Pair<Peer, TransactionViewModel> tuple = receivedStageQueue.poll(100, TimeUnit.MILLISECONDS);
-                if (tuple == null) {
+                Triple<Peer, TransactionViewModel, Boolean> triple = receivedStageQueue.poll(100, TimeUnit.MILLISECONDS);
+                if (triple == null) {
                     continue;
                 }
-                Peer peer = tuple.getLeft();
-                TransactionViewModel tvm = tuple.getRight();
+                Peer peer = triple.getLeft();
+                TransactionViewModel tvm = triple.getMiddle();
+                boolean bypass = triple.getRight();
+
+                if (bypass) {
+                    broadcastStageQueue.put(new ImmutablePair<>(peer, tvm));
+                    continue;
+                }
 
                 boolean stored;
 
@@ -55,22 +62,24 @@ public class ReceivedStage implements Runnable {
                     continue;
                 }
 
-                if (stored) {
-                    tvm.setArrivalTime(System.currentTimeMillis());
-                    try {
-                        txValidator.updateStatus(tvm);
-                        // peer might be null because tx came from a broadcastTransaction command
-                        if(peer != null){
-                            tvm.updateSender(peer.getId());
-                        }
-                        tvm.update(tangle, snapshotProvider.getInitialSnapshot(), "arrivalTime|sender");
-                    } catch (Exception e) {
-                        log.error("error updating newly received tx", e);
-                    }
-
-                    // broadcast the newly saved tx to the other peers
-                    broadcastStageQueue.put(new ImmutablePair<>(peer, tvm));
+                if (!stored) {
+                    continue;
                 }
+
+                tvm.setArrivalTime(System.currentTimeMillis());
+                try {
+                    txValidator.updateStatus(tvm);
+                    // peer might be null because tx came from a broadcastTransaction command
+                    if (peer != null) {
+                        tvm.updateSender(peer.getId());
+                    }
+                    tvm.update(tangle, snapshotProvider.getInitialSnapshot(), "arrivalTime|sender");
+                } catch (Exception e) {
+                    log.error("error updating newly received tx", e);
+                }
+
+                // broadcast the newly saved tx to the other peers
+                broadcastStageQueue.put(new ImmutablePair<>(peer, tvm));
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

@@ -10,8 +10,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.SocketChannel;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class Peer {
 
@@ -23,17 +23,20 @@ public class Peer {
     private ByteBuffer current = ByteBuffer.allocate(PACKET_SIZE);
 
     // next stage in the processing of incoming data
-    private ArrayBlockingQueue<Pair<Peer, ByteBuffer>> preProcessStageQueue;
+    private BlockingQueue<Pair<Peer, ByteBuffer>> preProcessStageQueue;
 
     // data to be written out to the peer
-    private ArrayBlockingQueue<ByteBuffer> writeOutQueue = new ArrayBlockingQueue<>(128);
+    private BlockingQueue<ByteBuffer> sendQueue = new LinkedBlockingQueue<>();
     private ByteBuffer currentToWrite;
+    private long msgsWritten;
+    private long msgsRead;
 
     private String id;
     private SocketChannel channel;
     private Selector selector;
 
-    public Peer(Selector selector, SocketChannel channel, String id, ArrayBlockingQueue<Pair<Peer, ByteBuffer>> preProcessStageQueue) {
+
+    public Peer(Selector selector, SocketChannel channel, String id, BlockingQueue<Pair<Peer, ByteBuffer>> preProcessStageQueue) {
         this.id = id;
         this.selector = selector;
         this.channel = channel;
@@ -45,6 +48,7 @@ public class Peer {
         if (current.remaining() != 0) {
             return bytesRead;
         }
+        msgsRead++;
         current.flip();
         preProcessStageQueue.put(new ImmutablePair<>(this, current));
         current = ByteBuffer.allocate(PACKET_SIZE);
@@ -58,11 +62,7 @@ public class Peer {
             return writeMsg();
         }
 
-        try {
-            currentToWrite = writeOutQueue.poll(50, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        currentToWrite = sendQueue.poll();
         if (currentToWrite == null) {
             return 0;
         }
@@ -72,6 +72,7 @@ public class Peer {
     private int writeMsg() throws IOException {
         int written = channel.write(currentToWrite);
         if (!currentToWrite.hasRemaining()) {
+            msgsWritten++;
             currentToWrite = null;
         }
         return written;
@@ -83,15 +84,24 @@ public class Peer {
 
     public void send(ByteBuffer buf) {
         try {
-            if (writeOutQueue.size() == 0) {
-                // channel key likely to be set to read key only
-                SelectionKey key = channel.keyFor(selector);
+            // re-register write interest
+            SelectionKey key = channel.keyFor(selector);
+            if (key.isValid() && (key.interestOps() & SelectionKey.OP_WRITE) == 0) {
                 key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
                 selector.wakeup();
             }
-            writeOutQueue.put(buf);
+
+            sendQueue.put(buf);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
+    }
+
+    public long getMsgsWritten() {
+        return msgsWritten;
+    }
+
+    public long getMsgsRead() {
+        return msgsRead;
     }
 }

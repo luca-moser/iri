@@ -22,15 +22,15 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -51,11 +51,11 @@ public class Gossip implements Runnable {
     private ReplyStage replyStage;
     private BroadcastStage broadcastStage;
 
-    private ArrayBlockingQueue<Pair<Peer, ByteBuffer>> preProcessStageQueue = new ArrayBlockingQueue<>(128);
-    private ArrayBlockingQueue<Pair<Peer, Triple<byte[], Long, Hash>>> txValidationStageQueue = new ArrayBlockingQueue<>(128);
-    private ArrayBlockingQueue<Pair<Peer, TransactionViewModel>> receivedStageQueue = new ArrayBlockingQueue<>(128);
-    private ArrayBlockingQueue<Pair<Peer, TransactionViewModel>> broadcastStageQueue = new ArrayBlockingQueue<>(128);
-    private ArrayBlockingQueue<Pair<Peer, Hash>> replyStageQueue = new ArrayBlockingQueue<>(128);
+    private BlockingQueue<Pair<Peer, ByteBuffer>> preProcessStageQueue = new LinkedBlockingQueue<>();
+    private BlockingQueue<Triple<Peer, Triple<byte[], Long, Hash>, Boolean>> txValidationStageQueue = new LinkedBlockingQueue<>();
+    private BlockingQueue<Triple<Peer, TransactionViewModel, Boolean>> receivedStageQueue = new LinkedBlockingQueue<>();
+    private BlockingQueue<Pair<Peer, TransactionViewModel>> broadcastStageQueue = new LinkedBlockingQueue<>();
+    private BlockingQueue<Pair<Peer, Hash>> replyStageQueue = new LinkedBlockingQueue<>();
 
     private TipRequester tipRequester;
     private Executor stagesThreadPool = Executors.newFixedThreadPool(6);
@@ -82,9 +82,17 @@ public class Gossip implements Runnable {
     }
 
     public void sendPacket(Peer peer, TransactionViewModel tvm) throws Exception {
+        sendPacket(peer, tvm, false);
+    }
+
+    public void sendPacket(Peer peer, TransactionViewModel tvm, boolean useHashOfTVM) throws Exception {
         ByteBuffer buf = ByteBuffer.allocate(Peer.PACKET_SIZE);
-        Hash hash = txRequester.transactionToRequest(rnd.nextDouble() < config.getpSelectMilestoneChild());
         buf.put(tvm.getBytes());
+
+        Hash hash = null;
+        if (!useHashOfTVM) {
+            hash = txRequester.transactionToRequest(rnd.nextDouble() < config.getpSelectMilestoneChild());
+        }
 
         if (hash != null) {
             buf.put(hash.bytes(), 0, PreProcessStage.REQ_HASH_SIZE);
@@ -155,6 +163,11 @@ public class Gossip implements Runnable {
                         log.info("peer connected {}", newPeer.getId());
                         newPeerConn.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE, newPeer);
                         peers.put(peerID, newPeer);
+                        // if all peers are connected we are no longer interested in any incoming connections
+                        // (as long as no peer dropped the connection)
+                        if (config.getNeighbors().size() == peers.size()) {
+                            key.interestOps(0);
+                        }
                         continue;
                     }
 
@@ -171,6 +184,7 @@ public class Gossip implements Runnable {
                             }
                             if (channel.finishConnect()) {
                                 log.info("peer connected {}", peer.getId());
+                                key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
                                 peers.put(peer.getId(), peer);
                                 continue;
                             }
@@ -185,7 +199,6 @@ public class Gossip implements Runnable {
                         //log.info("reading from peer {}", peer.getId());
                         if (peer.read() == -1) {
                             removeDisconnectedPeer(channel, peer.getId());
-                            continue;
                         }
                     }
 
@@ -204,7 +217,6 @@ public class Gossip implements Runnable {
                         }
                     }
                 }
-                selector.selectedKeys().clear();
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -213,7 +225,8 @@ public class Gossip implements Runnable {
         }
     }
 
-    private static LongHashFunction txCacheDigestHashFunc = LongHashFunction.xx();;
+    private static LongHashFunction txCacheDigestHashFunc = LongHashFunction.xx();
+    ;
 
     public static long getTxCacheDigest(byte[] receivedData) throws NoSuchAlgorithmException {
         return txCacheDigestHashFunc.hashBytes(receivedData);
@@ -256,19 +269,19 @@ public class Gossip implements Runnable {
     }
 
 
-    public ArrayBlockingQueue<Pair<Peer, TransactionViewModel>> getReceivedStageQueue() {
+    public BlockingQueue<Triple<Peer, TransactionViewModel, Boolean>> getReceivedStageQueue() {
         return receivedStageQueue;
     }
 
-    public ArrayBlockingQueue<Pair<Peer, TransactionViewModel>> getBroadcastStageQueue() {
+    public BlockingQueue<Pair<Peer, TransactionViewModel>> getBroadcastStageQueue() {
         return broadcastStageQueue;
     }
 
-    public ArrayBlockingQueue<Pair<Peer, Hash>> getReplyStageQueue() {
+    public BlockingQueue<Pair<Peer, Hash>> getReplyStageQueue() {
         return replyStageQueue;
     }
 
-    public ArrayBlockingQueue<Pair<Peer, Triple<byte[], Long, Hash>>> getTxValidationStageQueue() {
+    public BlockingQueue<Triple<Peer, Triple<byte[], Long, Hash>, Boolean>> getTxValidationStageQueue() {
         return txValidationStageQueue;
     }
 

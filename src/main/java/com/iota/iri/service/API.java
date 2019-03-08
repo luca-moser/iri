@@ -1269,7 +1269,7 @@ public class API {
             byte[] txTrits = Converter.allocateTritsForTrytes(TRYTES_SIZE);
             Converter.trits(tryte, txTrits, 0);
             try {
-                instance.gossip.getTxValidationStageQueue().put(new ImmutablePair<>(null, new ImmutableTriple<>(txTrits, null, null)));
+                instance.gossip.getTxValidationStageQueue().put(new ImmutableTriple<>(null, new ImmutableTriple<>(txTrits, null, null), true));
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
