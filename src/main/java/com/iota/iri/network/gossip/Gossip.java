@@ -133,6 +133,8 @@ public class Gossip implements Runnable {
 
             for (InetSocketAddress neighborAddr : peerAddrs) {
                 SocketChannel peerConn = SocketChannel.open();
+                peerConn.socket().setTcpNoDelay(true);
+                peerConn.socket().setSoLinger(true, 0);
                 peerConn.configureBlocking(false);
                 peerConn.connect(neighborAddr);
                 String peerID = peerID(peerConn);

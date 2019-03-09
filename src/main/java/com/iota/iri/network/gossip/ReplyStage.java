@@ -68,7 +68,7 @@ public class ReplyStage implements Runnable {
                     try {
                         // retrieve random tx
                         if (txRequester.numberOfTransactionsToRequest() == 0 || rnd.nextDouble() >= config.getpReplyRandomTip()) {
-                            return;
+                            continue;
                         }
                         transactionPointer = getRandomTipPointer();
                         tvm = TransactionViewModel.fromHash(tangle, transactionPointer);
@@ -87,7 +87,6 @@ public class ReplyStage implements Runnable {
                 if (tvm != null && tvm.getType() == TransactionViewModel.FILLED_SLOT) {
                     try {
                         // send the requested tx data to the requester
-                        log.info("replying tx {}", Converter.trytes(tvm.getHash().trits()));
                         gossip.sendPacket(peer, tvm);
                         // cache the replied with tx
                         long txDigest = Gossip.getTxCacheDigest(tvm.getBytes());
