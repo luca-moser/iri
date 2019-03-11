@@ -48,13 +48,7 @@ public class ReceivedStage implements Runnable {
                 TransactionViewModel tvm = triple.getMiddle();
                 boolean bypass = triple.getRight();
 
-                if (bypass) {
-                    broadcastStageQueue.put(new ImmutablePair<>(peer, tvm));
-                    continue;
-                }
-
                 boolean stored;
-
                 try {
                     stored = tvm.store(tangle, snapshotProvider.getInitialSnapshot());
                 } catch (Exception e) {
@@ -62,20 +56,18 @@ public class ReceivedStage implements Runnable {
                     continue;
                 }
 
-                if (!stored) {
-                    continue;
-                }
-
-                tvm.setArrivalTime(System.currentTimeMillis());
-                try {
-                    txValidator.updateStatus(tvm);
-                    // peer might be null because tx came from a broadcastTransaction command
-                    if (peer != null) {
-                        tvm.updateSender(peer.getId());
+                if (stored) {
+                    tvm.setArrivalTime(System.currentTimeMillis());
+                    try {
+                        txValidator.updateStatus(tvm);
+                        // peer might be null because tx came from a broadcastTransaction command
+                        if (peer != null) {
+                            tvm.updateSender(peer.getId());
+                        }
+                        tvm.update(tangle, snapshotProvider.getInitialSnapshot(), "arrivalTime|sender");
+                    } catch (Exception e) {
+                        log.error("error updating newly received tx", e);
                     }
-                    tvm.update(tangle, snapshotProvider.getInitialSnapshot(), "arrivalTime|sender");
-                } catch (Exception e) {
-                    log.error("error updating newly received tx", e);
                 }
 
                 // broadcast the newly saved tx to the other peers

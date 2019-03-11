@@ -8,6 +8,7 @@ import com.iota.iri.utils.Converter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 
 public class TipRequester implements Runnable {
@@ -39,14 +40,14 @@ public class TipRequester implements Runnable {
             try {
                 final TransactionViewModel msTVM = TransactionViewModel.fromHash(tangle, latestMilestoneTracker.getLatestMilestoneHash());
 
-                if(msTVM.getBytes().length > 0){
-                    gossip.getPeers().values().forEach(peer -> {
+                if (msTVM.getBytes().length > 0) {
+                    for (Peer peer : gossip.getPeers().values()) {
                         try {
                             gossip.sendPacket(peer, msTVM, true);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
-                    });
+                    }
                 }
 
                 long now = System.currentTimeMillis();

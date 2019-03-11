@@ -16,21 +16,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.*;
+import java.net.ConnectException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -75,9 +71,9 @@ public class Gossip implements Runnable {
         this.tipRequester = new TipRequester(this, tangle, latestMilestoneTracker, txRequester);
     }
 
-    private HashMap<String, Peer> peers = new HashMap<>();
+    private ConcurrentHashMap<String, Peer> peers = new ConcurrentHashMap<>();
 
-    public HashMap<String, Peer> getPeers() {
+    public ConcurrentHashMap<String, Peer> getPeers() {
         return peers;
     }
 
@@ -104,6 +100,44 @@ public class Gossip implements Runnable {
         peer.send(buf);
     }
 
+    private void initPeers(Selector selector) throws IOException {
+        // parse URIs
+        List<URI> peerURIs = config.getNeighbors().stream().distinct()
+                .filter(s -> !s.isEmpty())
+                .map(Gossip::uri).map(Optional::get)
+                .filter(this::isURIValid)
+                .collect(Collectors.toList());
+
+        for (URI peerURI : peerURIs) {
+            InetSocketAddress addr = new InetSocketAddress(peerURI.getHost(), peerURI.getPort());
+            String peerID = peerID(addr);
+
+            Peer peer;
+            switch (peerURI.getScheme()) {
+                case "tcp":
+                    SocketChannel tcpChannel = SocketChannel.open();
+                    tcpChannel.socket().setTcpNoDelay(true);
+                    tcpChannel.socket().setSoLinger(true, 0);
+                    tcpChannel.configureBlocking(false);
+                    tcpChannel.connect(addr);
+                    peer = new Peer(selector, tcpChannel, peerID, Peer.ConnectType.TCP, preProcessStageQueue);
+                    tcpChannel.register(selector, SelectionKey.OP_CONNECT | SelectionKey.OP_WRITE | SelectionKey.OP_READ, peer);
+                    // note that tcp peers are added to the peers map once they're actually fully connected
+                    break;
+                case "udp":
+                    DatagramChannel udpChannel = DatagramChannel.open();
+                    udpChannel.configureBlocking(false);
+                    udpChannel.connect(addr);
+                    peer = new Peer(selector, udpChannel, peerID, Peer.ConnectType.UDP, preProcessStageQueue);
+                    udpChannel.register(selector, SelectionKey.OP_WRITE, peer);
+                    peers.put(peerID, peer);
+                    break;
+                default:
+                    throw new RuntimeException(String.format("invalid peer uri in config: %s", peerURI.toString()));
+            }
+        }
+    }
+
     @Override
     public void run() {
 
@@ -117,30 +151,22 @@ public class Gossip implements Runnable {
 
         // run selector loop
         try (Selector selector = Selector.open()) {
-            ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
-            serverSocketChannel.configureBlocking(false);
-            serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
-            serverSocketChannel.socket().bind(new InetSocketAddress("0.0.0.0", config.getTcpReceiverPort()));
-            log.info("bound server TCP socket");
+            ServerSocketChannel tcpSrvSocket = ServerSocketChannel.open();
+            tcpSrvSocket.configureBlocking(false);
+            tcpSrvSocket.register(selector, SelectionKey.OP_ACCEPT);
+            InetSocketAddress tcpBindAddr = new InetSocketAddress("0.0.0.0", config.getTcpReceiverPort());
+            tcpSrvSocket.socket().bind(tcpBindAddr);
+            log.info("bound server TCP socket to {}", tcpBindAddr);
 
-            // connect to all defined peers
-            List<InetSocketAddress> peerAddrs = config.getNeighbors().stream().distinct()
-                    .filter(s -> !s.isEmpty())
-                    .map(Gossip::uri).map(Optional::get)
-                    .filter(this::isURIValid)
-                    .map(uri -> new InetSocketAddress(uri.getHost(), uri.getPort()))
-                    .collect(Collectors.toList());
+            DatagramChannel udpSrvSocket = DatagramChannel.open();
+            InetSocketAddress udpBindAddr = new InetSocketAddress("0.0.0.0", config.getUdpReceiverPort());
+            udpSrvSocket.configureBlocking(false);
+            udpSrvSocket.register(selector, SelectionKey.OP_READ);
+            udpSrvSocket.bind(udpBindAddr);
+            log.info("bound server UDP socket to {}", udpBindAddr);
 
-            for (InetSocketAddress neighborAddr : peerAddrs) {
-                SocketChannel peerConn = SocketChannel.open();
-                peerConn.socket().setTcpNoDelay(true);
-                peerConn.socket().setSoLinger(true, 0);
-                peerConn.configureBlocking(false);
-                peerConn.connect(neighborAddr);
-                String peerID = peerID(peerConn);
-                Peer peer = new Peer(selector, peerConn, peerID, preProcessStageQueue);
-                peerConn.register(selector, SelectionKey.OP_CONNECT | SelectionKey.OP_WRITE | SelectionKey.OP_READ, peer);
-            }
+            // build up connections to peers
+            initPeers(selector);
 
             while (!SHUTDOWN.get()) {
                 int selected = selector.select();
@@ -161,7 +187,7 @@ public class Gossip implements Runnable {
                             continue;
                         }
                         newPeerConn.configureBlocking(false);
-                        Peer newPeer = new Peer(selector, newPeerConn, peerID, preProcessStageQueue);
+                        Peer newPeer = new Peer(selector, newPeerConn, peerID, Peer.ConnectType.TCP, preProcessStageQueue);
                         log.info("peer connected {}", newPeer.getId());
                         newPeerConn.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE, newPeer);
                         peers.put(peerID, newPeer);
@@ -173,10 +199,11 @@ public class Gossip implements Runnable {
                         continue;
                     }
 
-                    SocketChannel channel = (SocketChannel) key.channel();
+                    SelectableChannel selectableChannel = key.channel();
                     Peer peer = (Peer) key.attachment();
 
                     if (key.isConnectable()) {
+                        SocketChannel channel = (SocketChannel) selectableChannel;
                         log.info("finishing connection to {}", peer.getId());
                         try {
                             if (peers.containsKey(peer.getId())) {
@@ -186,6 +213,7 @@ public class Gossip implements Runnable {
                             }
                             if (channel.finishConnect()) {
                                 log.info("peer connected {}", peer.getId());
+                                // remove connect interest
                                 key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
                                 peers.put(peer.getId(), peer);
                                 continue;
@@ -198,23 +226,45 @@ public class Gossip implements Runnable {
                     }
 
                     if (key.isReadable()) {
+                        if (selectableChannel instanceof DatagramChannel) {
+                            // udp server socket
+                            DatagramChannel udpSrv = (DatagramChannel) selectableChannel;
+                            ByteBuffer buf = ByteBuffer.allocate(Peer.PACKET_SIZE);
+                            InetSocketAddress source = (InetSocketAddress) udpSrv.receive(buf);
+                            if (source == null) {
+                                // some receive()s have no source address set
+                                continue;
+                            }
+                            String id = peerID(source);
+                            Peer udpPeer = peers.get(id);
+                            // if the peer is null, the then sender is not a neighbor
+                            if (udpPeer != null) {
+                                udpPeer.read(buf);
+                            }
+                            continue;
+                        }
                         //log.info("reading from peer {}", peer.getId());
                         if (peer.read() == -1) {
-                            removeDisconnectedPeer(channel, peer.getId());
+                            removeDisconnectedPeer(selectableChannel, peer.getId());
                         }
                     }
 
                     if (key.isWritable()) {
-                        //log.info("writing to peer {}", peer.getId());
                         switch (peer.write()) {
                             case 0:
                                 // nothing was written, probably because no message was available to send.
-                                // lets unregister this channel from writing events until at least
+                                // lets unregister this channel from write interests until at least
                                 // one message is back available for sending.
-                                key.interestOps(SelectionKey.OP_READ);
+                                if (selectableChannel instanceof SocketChannel) {
+                                    key.interestOps(SelectionKey.OP_READ);
+                                } else {
+                                    // as udp peer 'connections' are write only, we de-register any interests
+                                    // and re-add the write interest once a message is available to send
+                                    key.interestOps(0);
+                                }
                                 break;
                             case -1:
-                                removeDisconnectedPeer(channel, peer.getId());
+                                removeDisconnectedPeer(selectableChannel, peer.getId());
                                 break;
                         }
                     }
@@ -228,22 +278,24 @@ public class Gossip implements Runnable {
     }
 
     private static LongHashFunction txCacheDigestHashFunc = LongHashFunction.xx();
-    ;
 
     public static long getTxCacheDigest(byte[] receivedData) throws NoSuchAlgorithmException {
         return txCacheDigestHashFunc.hashBytes(receivedData);
     }
 
-    private void removeDisconnectedPeer(SocketChannel peerChannel, String id) throws IOException {
+    private void removeDisconnectedPeer(SelectableChannel channel, String id) throws IOException {
         log.info("removing peer {} from connected peers", id);
-        peerChannel.close();
+        channel.close();
         peers.remove(id);
     }
 
     private String peerID(SocketChannel peerChannel) throws IOException {
-        SocketAddress socketAddr = peerChannel.getRemoteAddress();
-        log.warn("socket address peerID {}", socketAddr);
-        return socketAddr.toString();
+        InetSocketAddress socketAddr = (InetSocketAddress) peerChannel.getRemoteAddress();
+        return socketAddr.getAddress().getHostAddress();
+    }
+
+    private String peerID(InetSocketAddress addr) throws IOException {
+        return addr.getAddress().getHostAddress();
     }
 
     public static Optional<URI> uri(final String uri) {

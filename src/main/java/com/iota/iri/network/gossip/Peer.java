@@ -6,14 +6,18 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.PortUnreachableException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
-import java.nio.channels.SocketChannel;
+import java.nio.channels.*;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class Peer {
+
+    enum ConnectType {
+        TCP, UDP
+    }
 
     private static final Logger log = LoggerFactory.getLogger(Peer.class);
 
@@ -32,27 +36,44 @@ public class Peer {
     private long msgsRead;
 
     private String id;
-    private SocketChannel channel;
+    private ConnectType connectType;
+    private SelectableChannel channel;
     private Selector selector;
 
 
-    public Peer(Selector selector, SocketChannel channel, String id, BlockingQueue<Pair<Peer, ByteBuffer>> preProcessStageQueue) {
+    public Peer(Selector selector, SelectableChannel channel, String id, ConnectType connectType, BlockingQueue<Pair<Peer, ByteBuffer>> preProcessStageQueue) {
         this.id = id;
         this.selector = selector;
+        this.connectType = connectType;
         this.channel = channel;
         this.preProcessStageQueue = preProcessStageQueue;
     }
 
     public int read() throws IOException, InterruptedException {
-        int bytesRead = channel.read(current);
+        int bytesRead = ((ReadableByteChannel) channel).read(current);
         if (current.remaining() != 0) {
             return bytesRead;
         }
+        submitToProcessStage();
+        return bytesRead;
+    }
+
+    public int read(ByteBuffer data) throws InterruptedException {
+        data.flip();
+        int bytesRead = data.limit();
+        current.put(data);
+        if (current.remaining() != 0) {
+            return bytesRead;
+        }
+        submitToProcessStage();
+        return bytesRead;
+    }
+
+    private void submitToProcessStage() throws InterruptedException {
         msgsRead++;
         current.flip();
         preProcessStageQueue.put(new ImmutablePair<>(this, current));
         current = ByteBuffer.allocate(PACKET_SIZE);
-        return bytesRead;
     }
 
     public int write() throws IOException {
@@ -70,7 +91,13 @@ public class Peer {
     }
 
     private int writeMsg() throws IOException {
-        int written = channel.write(currentToWrite);
+        int written = 0;
+        try {
+            written = ((WritableByteChannel) channel).write(currentToWrite);
+        } catch (PortUnreachableException ex) {
+            // thrown when a send is done to a non reachable port while using UDP
+            return 0;
+        }
         if (!currentToWrite.hasRemaining()) {
             msgsWritten++;
             currentToWrite = null;
@@ -86,8 +113,12 @@ public class Peer {
         try {
             // re-register write interest
             SelectionKey key = channel.keyFor(selector);
-            if (key.isValid() && (key.interestOps() & SelectionKey.OP_WRITE) == 0) {
-                key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+            if (key != null && key.isValid() && (key.interestOps() & SelectionKey.OP_WRITE) == 0) {
+                if (channel instanceof DatagramChannel) {
+                    key.interestOps(SelectionKey.OP_WRITE);
+                } else {
+                    key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
+                }
                 selector.wakeup();
             }
 

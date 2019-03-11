@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -35,7 +36,7 @@ public class BroadcastStage implements Runnable {
                 TransactionViewModel tvm = tuple.getRight();
 
                 // racy
-                HashMap<String, Peer> currentlyConnectedPeers = gossip.getPeers();
+                Map<String, Peer> currentlyConnectedPeers = gossip.getPeers();
                 for (Peer peer : currentlyConnectedPeers.values()) {
                     // don't send back to origin peer
                     if (peer.equals(originPeer)) {
