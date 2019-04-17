@@ -20,7 +20,7 @@ public class FIFOCache<K, V> {
 
     private static final Logger log = LoggerFactory.getLogger(FIFOCache.class);
 
-    private ReadWriteLock cacheLock = new ReentrantReadWriteLock();
+    private ReadWriteLock cacheLock = new ReentrantReadWriteLock(true);
     private final int capacity;
     private final double dropRate;
     private LinkedHashMap<K, V> map;
