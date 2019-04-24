@@ -42,6 +42,7 @@ public abstract class BaseIotaConfig implements IotaConfig {
     protected int neighboringSocketPort = Defaults.NEIGHBORING_SOCKET_PORT;
     protected int reconnectAttemptIntervalSeconds = Defaults.RECONNECT_ATTEMPT_INTERVAL_SECONDS;
     protected boolean autoTetheringEnabled = Defaults.AUTO_TETHERING_ENABLED;
+    protected int preProcessSleepMillisec = Defaults.PRE_PROCESS_SLEEP_MILLISEC;
     protected double pRemoveRequest = Defaults.P_REMOVE_REQUEST;
     protected double pDropCacheEntry = Defaults.P_DROP_CACHE_ENTRY;
     protected int sendLimit = Defaults.SEND_LIMIT;
@@ -257,6 +258,17 @@ public abstract class BaseIotaConfig implements IotaConfig {
     @Parameter(names = {"--reconnect-attempt-interval-seconds"}, description = NetworkConfig.Descriptions.RECONNECT_ATTEMPT_INTERVAL_SECONDS)
     protected void setReconnectAttemptIntervalSeconds(int reconnectAttemptIntervalSeconds) {
         this.reconnectAttemptIntervalSeconds = reconnectAttemptIntervalSeconds;
+    }
+
+    @Override
+    public int getPreProcessSleepMillisec() {
+        return preProcessSleepMillisec;
+    }
+
+    @JsonProperty
+    @Parameter(names = {"--pre-process-sleep-ms"}, description = NetworkConfig.Descriptions.PRE_PROCESS_SLEEP_MILLISEC)
+    protected void setPreProcessSleepMillisec(int preProcessSleepMillisec) {
+        this.preProcessSleepMillisec = preProcessSleepMillisec;
     }
 
     @Override
@@ -809,6 +821,7 @@ public abstract class BaseIotaConfig implements IotaConfig {
         int NEIGHBORING_SOCKET_PORT = 15600;
         int RECONNECT_ATTEMPT_INTERVAL_SECONDS = 60;
         boolean AUTO_TETHERING_ENABLED = false;
+        int PRE_PROCESS_SLEEP_MILLISEC = 0;
         double P_REMOVE_REQUEST = 0.01d;
         int SEND_LIMIT = -1;
         int MAX_NEIGHBORS = 5;

@@ -25,6 +25,12 @@ public interface NetworkConfig extends Config {
     int getReconnectAttemptIntervalSeconds();
 
     /**
+     *
+     * @return Descriptions#PRE_PROCESS_SLEEP_SEC
+     */
+    int getPreProcessSleepMillisec();
+
+    /**
      * @return Descriptions#AUTO_TETHERING_ENABLED
      */
     boolean isAutoTetheringEnabled();
@@ -78,6 +84,7 @@ public interface NetworkConfig extends Config {
         String NEIGHBORING_SOCKET_ADDRESS = "The address to bind the TCP server socket to.";
         String NEIGHBORING_SOCKET_PORT = "The TCP Receiver Port.";
         String RECONNECT_ATTEMPT_INTERVAL_SECONDS = "The interval at which to reconnect to wanted neighbors.";
+        String PRE_PROCESS_SLEEP_MILLISEC = "How many milliseconds to sleep in the pre process stage";
         String AUTO_TETHERING_ENABLED = "Whether to accept new connections from unknown neighbors. "
                 + "Unknown meaning neighbors which are not defined in the config and were not added via addNeighbors.";
         String P_REMOVE_REQUEST = DescriptionHelper.PROB_OF + " stopping to request a transaction. This number should be " +

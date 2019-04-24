@@ -1,5 +1,6 @@
 package com.iota.iri.network.pipeline;
 
+import com.iota.iri.conf.IotaConfig;
 import com.iota.iri.controllers.TransactionViewModel;
 import com.iota.iri.model.Hash;
 import com.iota.iri.model.HashFactory;
@@ -22,14 +23,16 @@ public class PreProcessStage {
     private static final Logger log = LoggerFactory.getLogger(PreProcessStage.class);
 
     private FIFOCache<Long, Hash> recentlySeenBytesCache;
+    private IotaConfig config;
 
     /**
      * Creates a new {@link PreProcessStage}.
      *
      * @param recentlySeenBytesCache The cache to use for checking whether a transaction is known
      */
-    public PreProcessStage(FIFOCache<Long, Hash> recentlySeenBytesCache) {
+    public PreProcessStage(FIFOCache<Long, Hash> recentlySeenBytesCache, IotaConfig config) {
         this.recentlySeenBytesCache = recentlySeenBytesCache;
+        this.config = config;
     }
 
     /**
@@ -57,6 +60,14 @@ public class PreProcessStage {
         System.arraycopy(data, data.length - Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH, reqHashBytes, 0,
                 Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH);
 
+        if (config.getPreProcessSleepMillisec() > 0) {
+            try {
+                Thread.sleep(config.getPreProcessSleepMillisec());
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
         // increment all txs count
         payload.getNeighbor().getMetrics().incrAllTransactionsCount();
 
@@ -64,7 +75,8 @@ public class PreProcessStage {
         long txDigest = NeighborRouter.getTxCacheDigest(txDataBytes);
 
         Hash receivedTxHash = recentlySeenBytesCache.get(txDigest);
-        Hash requestedHash = HashFactory.TRANSACTION.create(reqHashBytes, 0, Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH);
+        Hash requestedHash = HashFactory.TRANSACTION.create(reqHashBytes, 0,
+                Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH);
 
         // received tx is known, therefore we can submit to the reply stage directly.
         if (receivedTxHash != null) {
