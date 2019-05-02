@@ -268,8 +268,9 @@ public class MilestonePrunerJob extends AbstractTransactionPrunerJob {
                 DAGHelper.get(getTangle()).traverseApprovees(milestoneViewModel.getHash(),
                         approvedTransaction -> approvedTransaction.snapshotIndex() >= milestoneViewModel.index(),
                         approvedTransaction -> {
+                            log.info("pruning {}", approvedTransaction.getHash());
                             if (approvedTransaction.value() < 0 &&
-                                    !spentAddressesService.wasAddressSpentFrom(approvedTransaction.getAddressHash())) {
+                                    spentAddressesService.wasAddressSpentFrom(approvedTransaction.getAddressHash())) {
                                 log.warn("Pruned spend transaction " + approvedTransaction.getHash() +
                                                 " did not have its spent address recorded. Persisting it now");
                                 spentAddressesService
