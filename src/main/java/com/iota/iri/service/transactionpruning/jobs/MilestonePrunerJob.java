@@ -270,7 +270,7 @@ public class MilestonePrunerJob extends AbstractTransactionPrunerJob {
                         approvedTransaction -> {
                             log.info("pruning {}", approvedTransaction.getHash());
                             if (approvedTransaction.value() < 0 &&
-                                    spentAddressesService.wasAddressSpentFrom(approvedTransaction.getAddressHash())) {
+                                    !spentAddressesProvider.containsAddress(approvedTransaction.getAddressHash())) {
                                 log.warn("Pruned spend transaction " + approvedTransaction.getHash() +
                                                 " did not have its spent address recorded. Persisting it now");
                                 spentAddressesService
