@@ -10,6 +10,7 @@ import com.iota.iri.network.neighbor.impl.NeighborImpl;
 import com.iota.iri.network.pipeline.TransactionProcessingPipeline;
 import com.iota.iri.network.protocol.Handshake;
 import com.iota.iri.network.protocol.Protocol;
+import com.iota.iri.service.warpsync.WarpSyncer;
 import com.iota.iri.utils.Converter;
 import com.iota.iri.utils.thread.ThreadIdentifier;
 import com.iota.iri.utils.thread.ThreadUtils;
@@ -55,6 +56,7 @@ public class NeighborRouter {
     private IotaConfig config;
     private TransactionRequester txRequester;
     private TransactionProcessingPipeline txPipeline;
+    private WarpSyncer warpSyncer;
 
     // internal
     private Selector selector;
@@ -107,9 +109,11 @@ public class NeighborRouter {
      * @param txRequester {@link TransactionRequester} instance to load hashes of requested transactions when gossiping
      * @param txPipeline  {@link TransactionProcessingPipeline} passed to newly created {@link Neighbor} instances
      */
-    public void init(IotaConfig config, TransactionRequester txRequester, TransactionProcessingPipeline txPipeline) {
+    public void init(IotaConfig config, TransactionRequester txRequester, TransactionProcessingPipeline txPipeline,
+            WarpSyncer warpSyncer) {
         this.txRequester = txRequester;
         this.txPipeline = txPipeline;
+        this.warpSyncer = warpSyncer;
         this.config = config;
 
         // reduce the coordinator address to its byte encoded representation
@@ -198,7 +202,7 @@ public class NeighborRouter {
                             newConn.configureBlocking(false);
                             Neighbor newNeighbor = new NeighborImpl<>(selector, newConn,
                                     remoteAddr.getAddress().getHostAddress(),
-                                    Neighbor.UNKNOWN_REMOTE_SERVER_SOCKET_PORT, txPipeline);
+                                    Neighbor.UNKNOWN_REMOTE_SERVER_SOCKET_PORT, txPipeline, warpSyncer);
                             String domain = ipToDomainMapping.get(remoteAddr.getAddress().getHostAddress());
                             if (domain != null) {
                                 newNeighbor.setDomain(domain);
@@ -434,7 +438,7 @@ public class NeighborRouter {
         }
 
         // check whether same MWM is used
-        if(handshake.getMWM() != config.getMwm()){
+        if (handshake.getMWM() != config.getMwm()) {
             log.error("dropping handshaked connection to neighbor {} as it uses a different MWM ({} instead of {})",
                     identity, handshake.getMWM(), config.getMwm());
             closeNeighborConnection(channel, null, selector);
@@ -570,7 +574,7 @@ public class NeighborRouter {
         tcpChannel.configureBlocking(false);
         tcpChannel.connect(addr);
         Neighbor neighbor = new NeighborImpl<>(selector, tcpChannel, addr.getAddress().getHostAddress(), addr.getPort(),
-                txPipeline);
+                txPipeline, warpSyncer);
         neighbor.setDomain(addr.getHostName());
         tcpChannel.register(selector, SelectionKey.OP_CONNECT, neighbor);
     }
@@ -776,7 +780,7 @@ public class NeighborRouter {
     public List<Neighbor> getNeighbors() {
         List<Neighbor> neighbors = new ArrayList<>(connectedNeighbors.values());
         reconnectPool.forEach(uri -> {
-            neighbors.add(new NeighborImpl<>(null, null, uri.getHost(), uri.getPort(), null));
+            neighbors.add(new NeighborImpl<>(null, null, uri.getHost(), uri.getPort(), null, null));
         });
         return neighbors;
     }

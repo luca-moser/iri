@@ -7,6 +7,7 @@ import com.iota.iri.network.pipeline.TransactionProcessingPipeline;
 import com.iota.iri.network.protocol.*;
 import com.iota.iri.network.protocol.message.MessageReader;
 import com.iota.iri.network.protocol.message.MessageReaderFactory;
+import com.iota.iri.service.warpsync.WarpSyncer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +16,6 @@ import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * {@link NeighborImpl} is an implementation of {@link Neighbor} using a {@link ByteChannel} as the source and
@@ -33,6 +33,9 @@ public class NeighborImpl<T extends SelectableChannel & ByteChannel> implements 
 
     // next stage in the processing of incoming data
     private TransactionProcessingPipeline txPipeline;
+
+    // warp synchronization
+    private WarpSyncer warpSyncer;
 
     // data to be written out to the neighbor
     private BlockingQueue<ByteBuffer> sendQueue = new ArrayBlockingQueue<>(100);
@@ -69,12 +72,13 @@ public class NeighborImpl<T extends SelectableChannel & ByteChannel> implements 
      * @param txPipeline             the transaction processing pipeline to submit newly received transactions to
      */
     public NeighborImpl(Selector selector, T channel, String hostAddress, int remoteServerSocketPort,
-            TransactionProcessingPipeline txPipeline) {
+            TransactionProcessingPipeline txPipeline, WarpSyncer warpSyncer) {
         this.hostAddress = hostAddress;
         this.remoteServerSocketPort = remoteServerSocketPort;
         this.selector = selector;
         this.channel = channel;
         this.txPipeline = txPipeline;
+        this.warpSyncer = warpSyncer;
         this.msgReader = MessageReaderFactory.create(ProtocolMessage.HEADER, ProtocolMessage.HEADER.getMaxLength());
     }
 
@@ -143,6 +147,21 @@ public class NeighborImpl<T extends SelectableChannel & ByteChannel> implements 
                     case TRANSACTION_GOSSIP:
                         msgsRead++;
                         txPipeline.process(this, msg);
+                        break;
+                    case WARP_SYNC_REQUEST:
+                        warpSyncer.syncRequestFrom(this, msg);
+                        break;
+                    case WARP_SYNC_OK:
+                        warpSyncer.okFrom(this, msg);
+                        break;
+                    case WARP_SYNC_CANCEL:
+                        warpSyncer.cancelFrom(this, msg);
+                        break;
+                    case WARP_SYNC_START:
+                        warpSyncer.startFrom(this, msg);
+                        break;
+                    case WARP_SYNC_TX:
+                        warpSyncer.txFrom(this, msg);
                         break;
                 }
                 // reset

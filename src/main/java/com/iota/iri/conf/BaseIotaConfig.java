@@ -50,6 +50,9 @@ public abstract class BaseIotaConfig implements IotaConfig {
     protected boolean dnsResolutionEnabled = Defaults.DNS_RESOLUTION_ENABLED;
     protected List<String> neighbors = new ArrayList<>();
 
+    //Warp Sync
+    protected int warpSyncDeltaThreshold = Defaults.WARP_SYNC_DELTA_THRESHOLD;
+
     //IXI
     protected String ixiDir = Defaults.IXI_DIR;
 
@@ -333,6 +336,17 @@ public abstract class BaseIotaConfig implements IotaConfig {
     @Parameter(names = {"-n", "--neighbors"}, description = NetworkConfig.Descriptions.NEIGHBORS)
     protected void setNeighbors(String neighbors) {
         this.neighbors = IotaUtils.splitStringToImmutableList(neighbors, SPLIT_STRING_TO_LIST_REGEX);
+    }
+
+    @Override
+    public int getWarpSyncDeltaThreshold() {
+        return warpSyncDeltaThreshold;
+    }
+
+    @JsonProperty
+    @Parameter(names = {"--warp-sync-delta-threshold"}, description = NetworkConfig.Descriptions.NEIGHBORS)
+    protected void setWarpSyncDeltaThreshold(int warpSyncDeltaThreshold) {
+        this.warpSyncDeltaThreshold = warpSyncDeltaThreshold;
     }
 
     @Override
@@ -803,6 +817,9 @@ public abstract class BaseIotaConfig implements IotaConfig {
         int MAX_NEIGHBORS = 5;
         boolean DNS_REFRESHER_ENABLED = true;
         boolean DNS_RESOLUTION_ENABLED = true;
+
+        //WarpSync
+        int WARP_SYNC_DELTA_THRESHOLD = 10;
 
         //ixi
         String IXI_DIR = "ixi";

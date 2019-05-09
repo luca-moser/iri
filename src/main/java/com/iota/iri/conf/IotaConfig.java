@@ -9,7 +9,7 @@ import java.io.File;
  *  A container for all possible configuration parameters of IRI.
  *  In charge of how we parse the configuration from given inputs.
  */
-public interface IotaConfig extends APIConfig, NodeConfig,
+public interface IotaConfig extends APIConfig, NodeConfig, WarpSyncConfig,
         IXIConfig, DbConfig, ConsensusConfig, ZMQConfig, TipSelConfig, PearlDiverConfig, SolidificationConfig {
     File CONFIG_FILE = new File("iota.ini");
 

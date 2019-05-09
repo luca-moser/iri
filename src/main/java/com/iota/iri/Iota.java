@@ -23,6 +23,7 @@ import com.iota.iri.service.tipselection.*;
 import com.iota.iri.service.tipselection.impl.*;
 import com.iota.iri.service.transactionpruning.TransactionPruningException;
 import com.iota.iri.service.transactionpruning.async.AsyncTransactionPruner;
+import com.iota.iri.service.warpsync.WarpSyncer;
 import com.iota.iri.storage.*;
 import com.iota.iri.storage.rocksDB.RocksDBPersistenceProvider;
 import com.iota.iri.utils.Pair;
@@ -103,6 +104,7 @@ public class Iota {
     public final TipRequester tipRequester;
     public final TransactionProcessingPipeline txPipeline;
     public final NeighborRouter neighborRouter;
+    public final WarpSyncer warpSyncer;
     public final IotaConfig configuration;
     public final TipsViewModel tipsViewModel;
     public final MessageQ messageQ;
@@ -138,6 +140,7 @@ public class Iota {
         neighborRouter = new NeighborRouter();
         txPipeline = new TransactionProcessingPipeline();
         tipRequester = new TipRequester();
+        warpSyncer = new WarpSyncer();
 
         // legacy code
         bundleValidator = new BundleValidator();
@@ -180,6 +183,7 @@ public class Iota {
 
         txPipeline.start();
         neighborRouter.start();
+        warpSyncer.start();
         tipRequester.start();
 
         latestMilestoneTracker.start();
@@ -219,7 +223,8 @@ public class Iota {
             transactionPruner.init(tangle, snapshotProvider, spentAddressesService, tipsViewModel, configuration);
         }
         transactionRequesterWorker.init(tangle, transactionRequester, tipsViewModel, neighborRouter);
-        neighborRouter.init(configuration, transactionRequester, txPipeline);
+        warpSyncer.init(configuration, tangle, snapshotProvider, latestMilestoneTracker, neighborRouter, txPipeline);
+        neighborRouter.init(configuration, transactionRequester, txPipeline, warpSyncer);
         txPipeline.init(neighborRouter, configuration, transactionValidator, tangle, snapshotProvider,
                 transactionRequester, tipsViewModel, latestMilestoneTracker);
         tipRequester.init(neighborRouter, tangle, latestMilestoneTracker, transactionRequester);

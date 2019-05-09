@@ -3,6 +3,7 @@ package com.iota.iri.network.pipeline;
 import com.iota.iri.controllers.TransactionViewModel;
 import com.iota.iri.network.NeighborRouter;
 import com.iota.iri.network.neighbor.Neighbor;
+import com.iota.iri.service.warpsync.WarpSyncer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +40,11 @@ public class BroadcastStage {
         BroadcastPayload payload = (BroadcastPayload) ctx.getPayload();
         Optional<Neighbor> optOriginNeighbor = payload.getOriginNeighbor();
         TransactionViewModel tvm = payload.getTransactionViewModel();
+
+        // don't broadcast anything while the node is still warp syncing
+        if (WarpSyncer.IS_WARP_SYNCING.get()) {
+            return ctx;
+        }
 
         // racy
         Map<String, Neighbor> currentlyConnectedNeighbors = neighborRouter.getConnectedNeighbors();

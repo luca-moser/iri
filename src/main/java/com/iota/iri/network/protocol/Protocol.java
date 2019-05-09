@@ -126,7 +126,7 @@ public class Protocol {
      * @param buf      the {@link ByteBuffer} to write into.
      * @param protoMsg the message type which will be sent
      */
-    private static void addProtocolHeader(ByteBuffer buf, ProtocolMessage protoMsg) {
+    public static void addProtocolHeader(ByteBuffer buf, ProtocolMessage protoMsg) {
         addProtocolHeader(buf, protoMsg, protoMsg.getMaxLength());
     }
 
@@ -137,7 +137,7 @@ public class Protocol {
      * @param protoMsg           the message type which will be sent
      * @param payloadLengthBytes the message length
      */
-    private static void addProtocolHeader(ByteBuffer buf, ProtocolMessage protoMsg, short payloadLengthBytes) {
+    public static void addProtocolHeader(ByteBuffer buf, ProtocolMessage protoMsg, short payloadLengthBytes) {
         buf.put(PROTOCOL_VERSION);
         buf.put(protoMsg.getTypeID());
         buf.putShort(payloadLengthBytes);
