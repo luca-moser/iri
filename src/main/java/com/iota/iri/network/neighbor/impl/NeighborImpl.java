@@ -16,6 +16,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 /**
  * {@link NeighborImpl} is an implementation of {@link Neighbor} using a {@link ByteChannel} as the source and
@@ -163,6 +164,9 @@ public class NeighborImpl<T extends SelectableChannel & ByteChannel> implements 
                     case WARP_SYNC_TX:
                         warpSyncer.txFrom(this, msg);
                         break;
+                    case WARP_SYNC_DONE:
+                        warpSyncer.doneFrom(this, msg);
+                        break;
                 }
                 // reset
                 readState = ReadState.PARSE_HEADER;
@@ -196,7 +200,16 @@ public class NeighborImpl<T extends SelectableChannel & ByteChannel> implements 
     }
 
     @Override
-    public void send(ByteBuffer buf) {
+    public boolean send(ByteBuffer buf) {
+        return sendMsg(buf, 0, null);
+    }
+
+    @Override
+    public boolean mustSend(ByteBuffer buf, int mustEnqueueIn, TimeUnit timeUnit) {
+        return sendMsg(buf, mustEnqueueIn, timeUnit);
+    }
+
+    private boolean sendMsg(ByteBuffer buf, int mustEnqueueIn, TimeUnit timeUnit) {
         // re-register write interest
         SelectionKey key = channel.keyFor(selector);
         if (key != null && key.isValid() && (key.interestOps() & SelectionKey.OP_WRITE) == 0) {
@@ -204,9 +217,23 @@ public class NeighborImpl<T extends SelectableChannel & ByteChannel> implements 
             selector.wakeup();
         }
 
+        if (mustEnqueueIn != 0) {
+            try {
+                if (!sendQueue.offer(buf, mustEnqueueIn, timeUnit)) {
+                    return false;
+                }
+            } catch (InterruptedException e) {
+                metrics.incrDroppedSendPacketsCount();
+                return false;
+            }
+            return true;
+        }
+
         if (!sendQueue.offer(buf)) {
             metrics.incrDroppedSendPacketsCount();
+            return false;
         }
+        return true;
     }
 
     @Override

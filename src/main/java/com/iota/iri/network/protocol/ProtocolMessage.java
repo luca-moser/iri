@@ -32,7 +32,9 @@ public enum ProtocolMessage {
     // transaction payload, max 1504 bytes
     WARP_SYNC_TX((byte) 6, (short) (Protocol.NON_SIG_TX_PART_BYTES_LENGTH + Protocol.SIG_DATA_MAX_BYTES_LENGTH), true),
     // signal to tell the other node to start transmitting transactions
-    WARP_SYNC_START((byte) 7, (short) 1, false);
+    WARP_SYNC_START((byte) 7, (short) 1, false),
+    // done signal from the sender
+    WARP_SYNC_DONE((byte) 8, (short) 1, false);
 
     ProtocolMessage(byte typeID, short maxLength, boolean supportsDynamicLength) {
         this.typeID = typeID;
@@ -51,6 +53,7 @@ public enum ProtocolMessage {
         lookup[5] = ProtocolMessage.WARP_SYNC_OK;
         lookup[6] = ProtocolMessage.WARP_SYNC_TX;
         lookup[7] = ProtocolMessage.WARP_SYNC_START;
+        lookup[8] = ProtocolMessage.WARP_SYNC_DONE;
     }
 
     /**

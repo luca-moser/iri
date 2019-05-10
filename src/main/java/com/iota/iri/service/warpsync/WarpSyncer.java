@@ -37,13 +37,14 @@ import org.slf4j.LoggerFactory;
 public class WarpSyncer {
 
     public final static AtomicBoolean IS_WARP_SYNCING = new AtomicBoolean(false);
-    private final static int MESSAGE_RECEIVE_TIMEOUT_SEC = 5;
-    private final static int BYTES_TO_MEGABYTES = 1048576;
+    private final static int MESSAGE_RECEIVE_TIMEOUT_SEC = 20;
+    private final static int BYTES_TO_KILOBYTES = 1024;
 
     private static final Logger log = LoggerFactory.getLogger(WarpSyncer.class);
     private final ThreadIdentifier warpSyncerThreadIdentifier = new ThreadIdentifier("Warp Syncer");
     private Thread warpSyncerThread;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
+    private final AtomicBoolean sleeping = new AtomicBoolean(false);
 
     // external
     private IotaConfig config;
@@ -61,11 +62,12 @@ public class WarpSyncer {
     private ReentrantLock currentReceiverLock = new ReentrantLock();
     private Neighbor currentReceiver;
     private int currentReceiverMilestoneTargetIndex;
-    private List<Hash> transactionsToSend;
+    private List<Hash> transactionsToSend = new ArrayList<>(1000);
 
     // cancellation/ready signals
     private AtomicBoolean processCancelled = new AtomicBoolean(false);
     private BlockingQueue<Pair<Neighbor, ByteBuffer>> readySignal = new ArrayBlockingQueue<>(1);
+    private BlockingQueue<Integer> interruptSignal = new ArrayBlockingQueue<>(1);
 
     // current step
     private long amountOfTransactionsToReceive = 0;
@@ -102,8 +104,8 @@ public class WarpSyncer {
     private void run() {
         log.info("started warp syncer thread");
         while (!shutdown.get()) {
-
             int currentMilestoneIndex = snapshotProvider.getLatestSnapshot().getIndex();
+            int targetMilestoneIndex = currentMilestoneIndex + 1;
             int latestMilestoneIndex = latestMilestoneTracker.getLatestMilestoneIndex();
 
             // check whether we got a warp sync request and the necessary data to fulfill the request
@@ -112,7 +114,9 @@ public class WarpSyncer {
                     try {
                         send();
                     } catch (InterruptedException e) {
-                        continue;
+                        if (shutdown.get()) {
+                            break;
+                        }
                     }
                 }
             } finally {
@@ -123,10 +127,10 @@ public class WarpSyncer {
                 // check whether we should request a warp sync ourselves.
                 // synchronize as long as we aren't synced up and there isn't any problem
                 // while receiving transactions
-                while (shouldSynchronize(currentMilestoneIndex, latestMilestoneIndex)) {
+                while (shouldSynchronize(currentMilestoneIndex, targetMilestoneIndex, latestMilestoneIndex)) {
                     log.info("threshold reached, requesting warp sync from neighbors...");
                     try {
-                        if ((currentSender = sendWarpSyncRequest()) == null) {
+                        if ((currentSender = sendWarpSyncRequest(targetMilestoneIndex)) == null) {
                             break;
                         }
                     } catch (InterruptedException e) {
@@ -137,16 +141,23 @@ public class WarpSyncer {
                         break;
                     }
 
+                    // increment target milestone index as we just successfully got the last one
+                    targetMilestoneIndex++;
                     currentMilestoneIndex = snapshotProvider.getLatestSnapshot().getIndex();
                     latestMilestoneIndex = latestMilestoneTracker.getLatestMilestoneIndex();
+                    if (currentMilestoneIndex >= latestMilestoneIndex || targetMilestoneIndex > latestMilestoneIndex) {
+                        break;
+                    }
                 }
             } finally {
                 resetState();
             }
 
             try {
-                Thread.sleep(TimeUnit.SECONDS.toMillis(5));
+                // used to immediately safely interrupt the thread from sleeping
+                interruptSignal.poll(10, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
         log.info("warp sync stopped");
@@ -158,7 +169,8 @@ public class WarpSyncer {
         }
 
         // send an ok packet to the requesting neighbor
-        log.info("will acknowledge the warp sync request from {}", currentReceiver.getHostAddressAndPort());
+        log.info("will acknowledge the warp sync request from {} for target milestone {}",
+                currentReceiver.getHostAddressAndPort(), currentReceiverMilestoneTargetIndex);
         currentReceiver.send(
                 createWarpSyncOkPacket(snapshotProvider.getLatestSnapshot().getIndex(), transactionsToSend.size()));
 
@@ -177,14 +189,15 @@ public class WarpSyncer {
         }
 
         // worst case scenario
-        long approxSizeOfDataToSend = (transactionsToSend.size() * Transaction.SIZE) / BYTES_TO_MEGABYTES;
-        log.info("got warp sync start signal from {}, sending off {} transactions (~{} MB) ",
-                currentReceiver.getHostAddressAndPort(), transactionsToSend.size(), approxSizeOfDataToSend);
+        log.info("got warp sync start signal from {}, sending off {} transactions (~{} KB) ",
+                currentReceiver.getHostAddressAndPort(), transactionsToSend.size(),
+                toKilobytes(transactionsToSend.size() * Transaction.SIZE));
 
         // stream transactions from the database directly to the given receiver
         long bytesSent = 0;
         int sentOff = 0;
         long start = System.currentTimeMillis();
+        log.info("sending data via warp sync to {}", currentReceiver.getHostAddressAndPort());
         for (Hash hash : transactionsToSend) {
             TransactionViewModel tvm;
             try {
@@ -207,17 +220,22 @@ public class WarpSyncer {
             }
             ByteBuffer buf = createWarpSyncTxPacket(Protocol.truncateTx(txBytes));
             bytesSent += buf.capacity();
-            currentReceiver.send(buf);
+            // we must send the transaction and not drop it
+            if (!currentReceiver.mustSend(buf, 10, TimeUnit.SECONDS)) {
+                currentReceiver.send(createWarpCancelPacket(WarpSyncCancellationReason.RECEIVE_TOO_SLOW));
+                return;
+            }
             sentOff++;
         }
 
-        log.info("sent off {} transactions (~{} MB) to {}, took {} seconds", sentOff, bytesSent / BYTES_TO_MEGABYTES,
-                currentReceiver.getHostAddressAndPort(), System.currentTimeMillis() - start / 1000);
-        Pair<Neighbor, ByteBuffer> thxMsg = readySignal.poll(MESSAGE_RECEIVE_TIMEOUT_SEC, TimeUnit.SECONDS);
-        if (thxMsg == null) {
-            log.info("didn't get acknowledgement message from {} in time but warp sync was successful",
-                    currentReceiver.getHostAddressAndPort());
-        }
+        Neighbor tempCurrentReceiver = currentReceiver;
+        resetState();
+        currentReceiver = null;
+        currentReceiverMilestoneTargetIndex = 0;
+        tempCurrentReceiver.send(createWarpSyncDonePacket());
+        log.info("sent off {} transactions (~{} KB) to {}, took {} seconds", sentOff, toKilobytes(bytesSent),
+                tempCurrentReceiver.getHostAddressAndPort(), (System.currentTimeMillis() - start) / 1000);
+
     }
 
     private boolean shouldSend(int currentMilestoneIndex, int latestMilestoneIndex) {
@@ -285,7 +303,7 @@ public class WarpSyncer {
 
         // load up all hashes of transactions which got confirmed by the requested target milestone
         MilestoneViewModel finalMilestoneViewModel = milestoneViewModel;
-        transactionsToSend = new ArrayList<>(1000);
+        long start = System.currentTimeMillis();
         try {
             DAGHelper.get(tangle).traverseApprovees(milestoneViewModel.getHash(),
                     // we use >= as later milestones may confirm a given transaction again
@@ -296,40 +314,40 @@ public class WarpSyncer {
             currentReceiver.send(createWarpCancelPacket(WarpSyncCancellationReason.INSUFFICIENT_DATA));
             return false;
         }
+        log.info("took {} ms to gather {} transactions from the database to send", System.currentTimeMillis() - start,
+                transactionsToSend.size());
 
         return true;
     }
 
     private void resetState() {
         synchronized (modeLock) {
-            mode = Mode.INIT;
             processCancelled.set(false);
             readySignal.clear();
-            transactionsToSend.clear();
-            try {
-                currentReceiverLock.lock();
-                currentReceiver = null;
-                currentReceiverMilestoneTargetIndex = 0;
-            } finally {
-                currentReceiverLock.unlock();
+            if (receive != null) {
+                receive.clear();
             }
+            transactionsToSend.clear();
+            mode = Mode.INIT;
         }
     }
 
-    private boolean shouldSynchronize(int currentMilestoneIndex, int latestMilestoneIndex) {
+    private boolean shouldSynchronize(int currentMilestoneIndex, int targetMilestoneIndex, int latestMilestoneIndex) {
         int delta = latestMilestoneIndex - currentMilestoneIndex;
-        log.info("current LSM {}, latest LM {}, delta {}, threshold {}", currentMilestoneIndex, latestMilestoneIndex,
-                delta, config.getWarpSyncDeltaThreshold());
+        log.info("current LSM {}, target {}, latest LM {}, delta {}, threshold {}", currentMilestoneIndex,
+                targetMilestoneIndex, latestMilestoneIndex, delta, config.getWarpSyncDeltaThreshold());
         return delta >= config.getWarpSyncDeltaThreshold();
     }
 
     public boolean synchronize() {
 
         // flag for other components to behave differently while warp sync is ongoing
+        log.info("receiving data via warp sync from {}", currentSender.getHostAddressAndPort());
         IS_WARP_SYNCING.set(true);
         try {
             // receive data from the given currentSender
             long shouldReceive = amountOfTransactionsToReceive;
+            long bytesReceived = 0;
             long start = System.currentTimeMillis();
             for (; amountOfTransactionsToReceive != 0; amountOfTransactionsToReceive--) {
                 ByteBuffer msg = receive.poll(MESSAGE_RECEIVE_TIMEOUT_SEC, TimeUnit.SECONDS);
@@ -345,20 +363,26 @@ public class WarpSyncer {
                 }
 
                 // log progress
-                long now = System.currentTimeMillis();
-                if (now - start > TimeUnit.SECONDS.toMillis(5)) {
-                    start = now;
-                    long received = shouldReceive - amountOfTransactionsToReceive;
+                long received = shouldReceive - amountOfTransactionsToReceive;
+                if (received % 100 == 0) {
                     double percentageDone = Math.floor((received / shouldReceive) * 100);
                     log.info("received {}/{} ({}%)", received, shouldReceive, percentageDone);
                 }
 
+                byte[] truncatedTxBytes = msg.array();
                 byte[] expandedTxBytes = new byte[Transaction.SIZE];
                 byte[] txTrits = new byte[TransactionViewModel.TRINARY_SIZE];
-                Protocol.expandTx(msg.array(), expandedTxBytes);
+                bytesReceived += truncatedTxBytes.length;
+                Protocol.expandTx(truncatedTxBytes, expandedTxBytes, ProtocolMessage.WARP_SYNC_TX.getMaxLength());
                 Converter.getTrits(expandedTxBytes, txTrits);
                 pipeline.process(txTrits);
             }
+
+            // wait for the sender's done signal
+            readySignal.poll(MESSAGE_RECEIVE_TIMEOUT_SEC, TimeUnit.SECONDS);
+
+            log.info("warp sync finished, received {} transactions (~{} KB) from {}", shouldReceive,
+                    (float) bytesReceived / BYTES_TO_KILOBYTES, currentSender.getHostAddressAndPort());
 
             // remember the current used sender
             previousSender = currentSender;
@@ -377,7 +401,7 @@ public class WarpSyncer {
         return true;
     }
 
-    private Neighbor sendWarpSyncRequest() throws InterruptedException {
+    private Neighbor sendWarpSyncRequest(int targetMilestoneIndex) throws InterruptedException {
         Map<String, Neighbor> neighbors = neighborRouter.getConnectedNeighbors();
         if (neighbors.size() == 0) {
             log.info("unable to warp sync since no neighbors are connected");
@@ -391,21 +415,19 @@ public class WarpSyncer {
         }
 
         // send each neighbor a packet
-        int currentMilestoneIndex = snapshotProvider.getInitialSnapshot().getIndex();
         log.info("requesting warp sync from {} neighbors...", neighbors.size());
         for (Neighbor neighbor : neighbors.values()) {
             // skip previously used sender
             if (neighbor == previousSender) {
                 continue;
             }
-            neighbor.send(createWarpRequestPacket(currentMilestoneIndex + 1));
+            neighbor.send(createWarpRequestPacket(targetMilestoneIndex));
         }
 
         Pair<Neighbor, ByteBuffer> firstReady = readySignal.poll(MESSAGE_RECEIVE_TIMEOUT_SEC, TimeUnit.SECONDS);
-
         // send a cancel message to each neighbor which didn't reply in time
         for (Neighbor neighbor : neighbors.values()) {
-            if (neighbor == firstReady) {
+            if (firstReady == null || neighbor == firstReady.getLeft()) {
                 continue;
             }
             neighbor.send(createWarpCancelPacket(WarpSyncCancellationReason.NOT_REPLIED_IN_TIME));
@@ -423,12 +445,12 @@ public class WarpSyncer {
         int latestKnownMilestoneIndexBySender = okMsg.getInt();
         amountOfTransactionsToReceive = okMsg.getLong();
         log.info(
-                "neighbor {} acknowledged our warp sync request, its LM index is {}. will receive {} transactions (~{} MB), hold on tight...",
+                "neighbor {} acknowledged our warp sync request, its LM index is {}. will receive {} transactions (~{} KB), hold on tight...",
                 firstReady.getLeft().getHostAddressAndPort(), latestKnownMilestoneIndexBySender,
-                amountOfTransactionsToReceive, (amountOfTransactionsToReceive * Transaction.SIZE) / BYTES_TO_MEGABYTES);
+                amountOfTransactionsToReceive, toKilobytes(amountOfTransactionsToReceive * Transaction.SIZE));
 
         // clear the receive queue
-        receive.clear();
+        receive = new ArrayBlockingQueue<>((int) amountOfTransactionsToReceive);
 
         // we are now receiving
         synchronized (modeLock) {
@@ -438,6 +460,10 @@ public class WarpSyncer {
         // send signal to start sending transactions
         firstReady.getLeft().send(createWarpSyncStartPacket());
         return firstReady.getLeft();
+    }
+
+    private double toKilobytes(long bytes) {
+        return Math.floor((double) (bytes / BYTES_TO_KILOBYTES) * 100) / 100;
     }
 
     public void txFrom(Neighbor neighbor, ByteBuffer txsMsg) {
@@ -477,6 +503,15 @@ public class WarpSyncer {
         readySignal.offer(new ImmutablePair<>(neighbor, startMsg));
     }
 
+    public void doneFrom(Neighbor neighbor, ByteBuffer doneMsg) {
+        synchronized (modeLock) {
+            if (mode != Mode.RECEIVING) {
+                return;
+            }
+        }
+        readySignal.offer(new ImmutablePair<>(neighbor, doneMsg));
+    }
+
     public void cancelFrom(Neighbor neighbor, ByteBuffer msg) {
         WarpSyncCancellationReason reason = WarpSyncCancellationReason.fromValue(msg.get());
         switch (mode) {
@@ -507,8 +542,12 @@ public class WarpSyncer {
                 potentialReceiver.send(createWarpCancelPacket(WarpSyncCancellationReason.REQUEST_SLOT_FILLED));
                 return;
             }
+
             currentReceiver = potentialReceiver;
             currentReceiverMilestoneTargetIndex = msg.getInt();
+
+            // signal the warp syncer thread to wake up
+            interruptSignal.offer(1);
         } finally {
             currentReceiverLock.unlock();
         }
@@ -554,6 +593,15 @@ public class WarpSyncer {
         ByteBuffer buf = ByteBuffer
                 .allocate(ProtocolMessage.HEADER.getMaxLength() + ProtocolMessage.WARP_SYNC_START.getMaxLength());
         Protocol.addProtocolHeader(buf, ProtocolMessage.WARP_SYNC_START);
+        buf.put((byte) 1);
+        buf.flip();
+        return buf;
+    }
+
+    public ByteBuffer createWarpSyncDonePacket() {
+        ByteBuffer buf = ByteBuffer
+                .allocate(ProtocolMessage.HEADER.getMaxLength() + ProtocolMessage.WARP_SYNC_DONE.getMaxLength());
+        Protocol.addProtocolHeader(buf, ProtocolMessage.WARP_SYNC_DONE);
         buf.put((byte) 1);
         buf.flip();
         return buf;

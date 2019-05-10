@@ -90,7 +90,8 @@ public class Protocol {
      * @param ownSourcePort the node's own server socket port number
      * @return a {@link ByteBuffer} containing the handshake packet
      */
-    public static ByteBuffer createHandshakePacket(char ownSourcePort, byte[] ownByteEncodedCooAddress, byte ownUsedMWM) {
+    public static ByteBuffer createHandshakePacket(char ownSourcePort, byte[] ownByteEncodedCooAddress,
+            byte ownUsedMWM) {
         ByteBuffer buf = ByteBuffer
                 .allocate(ProtocolMessage.HEADER.getMaxLength() + ProtocolMessage.HANDSHAKE.getMaxLength());
         addProtocolHeader(buf, ProtocolMessage.HANDSHAKE);
@@ -156,6 +157,27 @@ public class Protocol {
         byte[] sigMsgFragPadding = new byte[numOfBytesOfSigMsgFragToExpand];
         int sigMsgFragBytesToCopy = data.length - Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH
                 - Protocol.NON_SIG_TX_PART_BYTES_LENGTH;
+
+        // build up transaction payload. empty signature message fragment equals padding with 1312x 0 bytes
+        System.arraycopy(data, 0, txDataBytes, 0, sigMsgFragBytesToCopy);
+        System.arraycopy(sigMsgFragPadding, 0, txDataBytes, sigMsgFragBytesToCopy, sigMsgFragPadding.length);
+        System.arraycopy(data, sigMsgFragBytesToCopy, txDataBytes, Protocol.SIG_DATA_MAX_BYTES_LENGTH,
+                Protocol.NON_SIG_TX_PART_BYTES_LENGTH);
+    }
+
+    /**
+     * Expands a truncated bytes encoded transaction payload.
+     *
+     * @param data            the source data
+     * @param txDataBytes     the array to expand the transaction into
+     * @param maxPacketLength the max length the packet normally would have
+     */
+    public static void expandTx(byte[] data, byte[] txDataBytes, int maxPacketLength) {
+        // we need to expand the tx data (signature message fragment) as
+        // it could have been truncated for transmission
+        int numOfBytesOfSigMsgFragToExpand = maxPacketLength - data.length;
+        byte[] sigMsgFragPadding = new byte[numOfBytesOfSigMsgFragToExpand];
+        int sigMsgFragBytesToCopy = data.length - Protocol.NON_SIG_TX_PART_BYTES_LENGTH;
 
         // build up transaction payload. empty signature message fragment equals padding with 1312x 0 bytes
         System.arraycopy(data, 0, txDataBytes, 0, sigMsgFragBytesToCopy);

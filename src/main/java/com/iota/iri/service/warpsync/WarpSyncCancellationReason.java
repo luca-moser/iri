@@ -20,7 +20,10 @@ public enum WarpSyncCancellationReason {
     NOT_SYNCED((byte) 6),
     // used when the advertised milestone from the warp sync requester
     // is newer than the node's own milestone
-    MILESTONE_TARGET_TOO_NEW((byte) 7);
+    MILESTONE_TARGET_TOO_NEW((byte) 7),
+    // used when the send queue of the receiving neighbor is getting
+    // dequeued too slowly
+    RECEIVE_TOO_SLOW((byte) 8);
 
     private byte id;
 
@@ -43,6 +46,7 @@ public enum WarpSyncCancellationReason {
         lookup[5] = WarpSyncCancellationReason.REQUEST_SLOT_FILLED;
         lookup[6] = WarpSyncCancellationReason.NOT_SYNCED;
         lookup[7] = WarpSyncCancellationReason.MILESTONE_TARGET_TOO_NEW;
+        lookup[8] = WarpSyncCancellationReason.RECEIVE_TOO_SLOW;
     }
 
     public static WarpSyncCancellationReason fromValue(byte val) {

@@ -4,6 +4,7 @@ import com.iota.iri.network.protocol.Handshake;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A {@link Neighbor} is a peer to/from which messages are sent/read from.
@@ -43,8 +44,20 @@ public interface Neighbor {
      * Instructs the {@link Neighbor} to send the given {@link ByteBuffer} to its destination channel.
      *
      * @param buf the {@link ByteBuffer} containing the message to send
+     * @return whether the given {@link ByteBuffer} was added to the send queue
      */
-    void send(ByteBuffer buf);
+    boolean send(ByteBuffer buf);
+
+    /**
+     * Instructs the {@link Neighbor} to send the given {@link ByteBuffer} to its destination channel and awaiting until
+     * the send queue is free again.
+     *
+     * @param buf           the {@link ByteBuffer} containing the message to send
+     * @param mustEnqueueIn the max amount of time to await for the send queue to become free
+     * @param timeUnit      the used time unit for mustEnqueueIn
+     * @return whether the given {@link ByteBuffer} was added to the send queue
+     */
+    boolean  mustSend(ByteBuffer buf, int mustEnqueueIn, TimeUnit timeUnit);
 
     /**
      * Gets the host address.
