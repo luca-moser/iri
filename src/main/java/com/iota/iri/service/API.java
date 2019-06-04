@@ -127,8 +127,7 @@ public class API {
 
     //Package Private For Testing
     final Map<ApiCommand, Function<Map<String, Object>, AbstractResponse>> commandRoute;
-    
-    
+
     private RestConnector connector;
 
     private final ExecutorService tipSelExecService = Executors.newSingleThreadExecutor(r -> new Thread(r, "tip-selection"));
@@ -136,7 +135,7 @@ public class API {
     /**
      * Starts loading the IOTA API, parameters do not have to be initialized.
      * 
-     * @param configuration 
+     * @param configuration Holds IRI configuration parameters.
      * @param ixi If a command is not in the standard API, 
      *            we try to process it as a Nashorn JavaScript module through {@link IXI}
      * @param transactionRequester Service where transactions get requested
@@ -610,15 +609,15 @@ public class API {
 
         Future<List<Hash>> tipSelection = null;
         List<Hash> tips;
-        try{
+
+        try {
             tipSelection = tipSelExecService.submit(() -> tipsSelector.getTransactionsToApprove(depth, reference));
             tips = tipSelection.get(configuration.getTipSelectionTimeoutSec(), TimeUnit.SECONDS);
-        }catch(TimeoutException ex){
+        } catch (TimeoutException ex) {
             // interrupt the tip-selection thread so that it aborts
             tipSelection.cancel(true);
-            throw new TipSelectionCancelledException(
-                    String.format("tip-selection exceeded timeout of %d seconds",
-                            configuration.getTipSelectionTimeoutSec()));
+            throw new TipSelectionCancelledException(String.format("tip-selection exceeded timeout of %d seconds",
+                    configuration.getTipSelectionTimeoutSec()));
         }
 
         if (log.isDebugEnabled()) {
@@ -673,26 +672,16 @@ public class API {
       **/
     @Document(name="storeTransactions")
     public AbstractResponse storeTransactionsStatement(List<String> trytes) throws Exception {
-        final List<TransactionViewModel> elements = new LinkedList<>();
-        byte[] txTrits = Converter.allocateTritsForTrytes(TRYTES_SIZE);
-        for (final String trytesPart : trytes) {
-            //validate all trytes
-            Converter.trits(trytesPart, txTrits, 0);
-            final TransactionViewModel transactionViewModel = transactionValidator.validateTrits(txTrits,
-                    transactionValidator.getMinWeightMagnitude());
-            elements.add(transactionViewModel);
-        }
-
+        final List<TransactionViewModel> elements = convertTrytes(trytes);
         for (final TransactionViewModel transactionViewModel : elements) {
             //store transactions
             if(transactionViewModel.store(tangle, snapshotProvider.getInitialSnapshot())) {
-                transactionViewModel.setArrivalTime(System.currentTimeMillis() / 1000L);
+                transactionViewModel.setArrivalTime(System.currentTimeMillis());
                 transactionValidator.updateStatus(transactionViewModel);
                 transactionViewModel.updateSender("local");
                 transactionViewModel.update(tangle, snapshotProvider.getInitialSnapshot(), "sender");
             }
         }
-        
         return AbstractResponse.createEmptyResponse();
     }
 
@@ -761,7 +750,7 @@ public class API {
      * You can search for multiple tips (and thus, milestones) to get past inclusion states of transactions.
      * </p>
      * <p>
-     * This API call returns a list of boolean values in the same order as the submitted transactions.<br/>
+     * This API call returns a list of boolean values in the same order as the submitted transactions.
      * Boolean values will be <tt>true</tt> for confirmed transactions, otherwise <tt>false</tt>.
      * </p>
      * Returns an {@link com.iota.iri.service.dto.ErrorResponse} if a tip is missing or the subtangle is not solid
@@ -1722,4 +1711,18 @@ public class API {
             }
         };
     }
+
+    private List<TransactionViewModel> convertTrytes(List<String> trytes) {
+        final List<TransactionViewModel> elements = new LinkedList<>();
+        byte[] txTrits = Converter.allocateTritsForTrytes(TRYTES_SIZE);
+        for (final String trytesPart : trytes) {
+            //validate all trytes
+            Converter.trits(trytesPart, txTrits, 0);
+            final TransactionViewModel transactionViewModel = transactionValidator.validateTrits(txTrits,
+                    transactionValidator.getMinWeightMagnitude());
+            elements.add(transactionViewModel);
+        }
+        return elements;
+    }
+
 }

@@ -3,9 +3,9 @@ package com.iota.iri.network;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.security.SecureRandom;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -22,7 +22,7 @@ public class FIFOCache<K, V> {
 
     private ReadWriteLock cacheLock = new ReentrantReadWriteLock(true);
     private final int capacity;
-    private LinkedHashMap<K, V> map;
+    private Map<K, V> map = new LinkedHashMap<>();
 
     /**
      * Creates a new {@link FIFOCache}.
@@ -31,7 +31,6 @@ public class FIFOCache<K, V> {
      */
     public FIFOCache(int capacity) {
         this.capacity = capacity;
-        this.map = new LinkedHashMap<>();
     }
 
     /**

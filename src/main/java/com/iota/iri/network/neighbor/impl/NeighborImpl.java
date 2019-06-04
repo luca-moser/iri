@@ -27,6 +27,9 @@ public class NeighborImpl<T extends SelectableChannel & ByteChannel> implements 
 
     private static final Logger log = LoggerFactory.getLogger(NeighborImpl.class);
 
+    /**
+     * The current state whether the neighbor is parsing a header or reading a message.
+     */
     private enum ReadState {
         PARSE_HEADER, READ_MESSAGE
     }
@@ -146,6 +149,8 @@ public class NeighborImpl<T extends SelectableChannel & ByteChannel> implements 
                 readState = ReadState.PARSE_HEADER;
                 msgReader = MessageReaderFactory.create(ProtocolMessage.HEADER, ProtocolMessage.HEADER.getMaxLength());
                 return bytesRead;
+            default:
+                // do nothing
         }
         return bytesRead;
     }
