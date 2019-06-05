@@ -285,6 +285,7 @@ public class Iota {
         txPipeline.shutdown();
         neighborRouter.shutdown();
         tangle.shutdown();
+        quickTransactionSolidifier.shutdown();
 
         // free the resources of the snapshot provider last because all other instances need it
         snapshotProvider.shutdown();
