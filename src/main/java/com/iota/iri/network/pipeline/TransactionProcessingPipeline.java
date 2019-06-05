@@ -1,6 +1,7 @@
 package com.iota.iri.network.pipeline;
 
 import com.iota.iri.TransactionValidator;
+import com.iota.iri.conf.IotaConfig;
 import com.iota.iri.conf.NodeConfig;
 import com.iota.iri.controllers.TipsViewModel;
 import com.iota.iri.crypto.batched.BatchedHasher;
@@ -89,9 +90,8 @@ public class TransactionProcessingPipeline {
      *                               reply stage
      */
     public void init(NeighborRouter neighborRouter, IotaConfig config, TransactionValidator txValidator, Tangle tangle,
-            SnapshotProvider snapshotProvider, TipsViewModel tipsViewModel,
-            LatestMilestoneTracker latestMilestoneTracker) {
-
+                     SnapshotProvider snapshotProvider, TipsViewModel tipsViewModel,
+                     LatestMilestoneTracker latestMilestoneTracker) {
         this.recentlySeenBytesCache = new FIFOCache<>(config.getCacheSizeBytes());
         this.preProcessStage = new PreProcessStage(recentlySeenBytesCache, config);
         this.replyStage = new ReplyStage(neighborRouter, config, tangle, tipsViewModel, latestMilestoneTracker,
