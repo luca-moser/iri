@@ -5,7 +5,6 @@ import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.iota.iri.IRI;
 import com.iota.iri.crypto.SpongeFactory;
 import com.iota.iri.model.Hash;
 import com.iota.iri.model.HashFactory;
@@ -30,7 +29,7 @@ public abstract class BaseIotaConfig implements IotaConfig {
 
     private boolean help;
     private boolean testnet = false;
-    
+
     //API
     protected int port = Defaults.API_PORT;
     protected String apiHost = Defaults.API_HOST;
@@ -41,7 +40,7 @@ public abstract class BaseIotaConfig implements IotaConfig {
     protected int maxGetTrytes = Defaults.MAX_GET_TRYTES;
     protected int maxBodyLength = Defaults.MAX_BODY_LENGTH;
     protected String remoteAuth = Defaults.REMOTE_AUTH;
-    
+
     //We don't have a REMOTE config but we have a remote flag. We must add a field for JCommander
     private boolean remote;
 
@@ -102,6 +101,8 @@ public abstract class BaseIotaConfig implements IotaConfig {
 
     //Tip Solidification
     protected boolean tipSolidifierEnabled = Defaults.TIP_SOLIDIFIER_ENABLED;
+    protected int solidifierDepth = Defaults.SOLIDIFIER_DEPTH;
+    protected int solidifierIntervalMillisec = Defaults.SOLIDIFIER_INTERVAL_MILLISEC;
 
     //PearlDiver
     protected int powThreads = Defaults.POW_THREADS;
@@ -142,12 +143,12 @@ public abstract class BaseIotaConfig implements IotaConfig {
     public boolean isHelp() {
         return help;
     }
-    
+
     @Override
     public boolean isTestnet() {
         return testnet;
     }
-    
+
     @JsonIgnore
     @Parameter(names = {Config.TESTNET_FLAG}, description = Config.Descriptions.TESTNET, arity = 1)
     protected void setTestnet(boolean testnet) {
@@ -176,7 +177,7 @@ public abstract class BaseIotaConfig implements IotaConfig {
         if (remote) {
             return "0.0.0.0";
         }
-        
+
         return apiHost;
     }
 
@@ -890,12 +891,34 @@ public abstract class BaseIotaConfig implements IotaConfig {
     }
 
     @Override
+    public int getSolidifierDepth() {
+        return solidifierDepth;
+    }
+
+    @JsonProperty
+    @Parameter(names = {"--solidifier-depth"}, description = SolidificationConfig.Descriptions.SOLIDIFIER_DEPTH)
+    protected void setSolidifierDepth(int solidifierDepth) {
+        this.solidifierDepth = solidifierDepth;
+    }
+
+    @Override
+    public int getSolidifierIntervalMillisec() {
+        return solidifierIntervalMillisec;
+    }
+
+    @JsonProperty
+    @Parameter(names = {"--solidifier-interval-millisec"}, description = SolidificationConfig.Descriptions.SOLIDIFIER_INTERVAL_MILLISEC)
+    protected void setSolidifierIntervalMillisec(int solidifierIntervalMillisec) {
+        this.solidifierIntervalMillisec = solidifierIntervalMillisec;
+    }
+
+    @Override
     public int getBelowMaxDepthTransactionLimit() {
         return maxAnalyzedTransactions;
     }
 
     @JsonProperty
-    @Parameter(names = "--max-analyzed-transactions", 
+    @Parameter(names = "--max-analyzed-transactions",
         description = TipSelConfig.Descriptions.BELOW_MAX_DEPTH_TRANSACTION_LIMIT)
     protected void setBelowMaxDepthTransactionLimit(int maxAnalyzedTransactions) {
         this.maxAnalyzedTransactions = maxAnalyzedTransactions;
@@ -980,7 +1003,9 @@ public abstract class BaseIotaConfig implements IotaConfig {
         int TIP_SELECTION_TIMEOUT_SEC = 60;
 
         //Tip solidification
-        boolean TIP_SOLIDIFIER_ENABLED = false;
+        boolean TIP_SOLIDIFIER_ENABLED = true;
+        int SOLIDIFIER_DEPTH = 3;
+        int SOLIDIFIER_INTERVAL_MILLISEC = 10000;
 
         //PearlDiver
         int POW_THREADS = 0;
