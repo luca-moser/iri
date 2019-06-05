@@ -284,7 +284,6 @@ public class Iota {
         tipRequester.shutdown();
         txPipeline.shutdown();
         neighborRouter.shutdown();
-        transactionValidator.shutdown();
         tangle.shutdown();
 
         // free the resources of the snapshot provider last because all other instances need it
