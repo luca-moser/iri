@@ -73,7 +73,6 @@ public class QuickTransactionSolidifier implements TransactionSolidifier {
             AtomicInteger updated = new AtomicInteger();
             dagHelper.traverseApprovers(milestone.getHash(), tvm -> !Thread.currentThread().isInterrupted(), tvm -> {
                 try {
-
                     if (transactionValidator.quietQuickSetSolid(tvm)) {
                         tvm.update(tangle, snapshotProvider.getInitialSnapshot(), "solid|height");
                         updated.incrementAndGet();
