@@ -62,6 +62,8 @@ public class QuickTransactionSolidifier implements TransactionSolidifier {
         }
 
         DAGHelper dagHelper = DAGHelper.get(tangle);
+
+        long start = System.currentTimeMillis();
         try {
             MilestoneViewModel milestone = MilestoneViewModel.get(tangle, latestMilestoneIndex - depth);
             // if we don't have the milestone which we wanted to use as a starting point, we simply don't run.
@@ -71,7 +73,9 @@ public class QuickTransactionSolidifier implements TransactionSolidifier {
             AtomicInteger updated = new AtomicInteger();
             dagHelper.traverseApprovers(milestone.getHash(), tvm -> !Thread.currentThread().isInterrupted(), tvm -> {
                 try {
-                    if (transactionValidator.quickSetSolid(tvm)) {
+
+                    if (transactionValidator.quietQuickSetSolid(tvm)) {
+                        tvm.update(tangle, snapshotProvider.getInitialSnapshot(), "solid|height");
                         updated.incrementAndGet();
                     }
                 } catch (Exception e) {
@@ -82,7 +86,8 @@ public class QuickTransactionSolidifier implements TransactionSolidifier {
             if (updated.get() == 0) {
                 return;
             }
-            log.info("updated {} transaction's solidity", updated.get());
+
+            log.info("updated {} transaction's solidity, took {} ms", updated.get(), System.currentTimeMillis() - start);
         } catch (Exception e) {
             log.error("error occurred during quick solidification run: {}", e.getMessage());
         }
