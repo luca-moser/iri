@@ -4,7 +4,7 @@ import com.iota.iri.conf.IotaConfig;
 import com.iota.iri.conf.TipSelConfig;
 import com.iota.iri.controllers.TipsViewModel;
 import com.iota.iri.controllers.TransactionViewModel;
-import com.iota.iri.network.TipRequester;
+import com.iota.iri.network.impl.TipsRequesterImpl;
 import com.iota.iri.network.TransactionRequester;
 import com.iota.iri.network.NeighborRouter;
 import com.iota.iri.network.impl.TransactionRequesterWorkerImpl;
@@ -102,7 +102,7 @@ public class Iota {
     public final TransactionValidator transactionValidator;
     public final TipsSolidifier tipsSolidifier;
     public final TransactionRequester transactionRequester;
-    public final TipRequester tipRequester;
+    public final TipsRequesterImpl tipRequester;
     public final TransactionProcessingPipeline txPipeline;
     public final NeighborRouter neighborRouter;
     public final IotaConfig configuration;
@@ -138,7 +138,7 @@ public class Iota {
         transactionRequesterWorker = new TransactionRequesterWorkerImpl();
         neighborRouter = new NeighborRouter();
         txPipeline = new TransactionProcessingPipeline();
-        tipRequester = new TipRequester();
+        tipRequester = new TipsRequesterImpl();
 
         // legacy code
         bundleValidator = new BundleValidator();
@@ -223,7 +223,7 @@ public class Iota {
             transactionPruner.init(tangle, snapshotProvider, spentAddressesService, spentAddressesProvider, tipsViewModel, configuration);
         }
         transactionRequesterWorker.init(tangle, transactionRequester, tipsViewModel, neighborRouter);
-        neighborRouter.init(configuration, transactionRequester, txPipeline);
+        neighborRouter.init(configuration, configuration, transactionRequester, txPipeline);
         txPipeline.init(neighborRouter, configuration, transactionValidator, tangle, snapshotProvider, tipsViewModel,
                 latestMilestoneTracker);
         tipRequester.init(neighborRouter, tangle, latestMilestoneTracker, transactionRequester);
