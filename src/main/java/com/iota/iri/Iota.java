@@ -29,6 +29,7 @@ import com.iota.iri.service.snapshot.SnapshotException;
 import com.iota.iri.service.snapshot.impl.LocalSnapshotManagerImpl;
 import com.iota.iri.service.snapshot.impl.SnapshotProviderImpl;
 import com.iota.iri.service.snapshot.impl.SnapshotServiceImpl;
+import com.iota.iri.service.solidifier.impl.QuickTransactionSolidifier;
 import com.iota.iri.service.spentaddresses.SpentAddressesException;
 import com.iota.iri.service.spentaddresses.impl.SpentAddressesProviderImpl;
 import com.iota.iri.service.spentaddresses.impl.SpentAddressesServiceImpl;
@@ -115,6 +116,8 @@ public class Iota {
 
     public final Tangle tangle;
     public final TransactionValidator transactionValidator;
+
+    public final QuickTransactionSolidifier quickTransactionSolidifier;
     public final TransactionRequester transactionRequester;
     public final TipsRequesterImpl tipRequester;
     public final TransactionProcessingPipeline txPipeline;
@@ -152,6 +155,7 @@ public class Iota {
         neighborRouter = new NeighborRouter();
         txPipeline = new TransactionProcessingPipelineImpl();
         tipRequester = new TipsRequesterImpl();
+        quickTransactionSolidifier = new QuickTransactionSolidifier();
 
         // legacy code
         bundleValidator = new BundleValidator();
@@ -200,6 +204,8 @@ public class Iota {
         seenMilestonesRetriever.start();
         milestoneSolidifier.start();
 
+        quickTransactionSolidifier.start();
+
         if (localSnapshotManager != null) {
             localSnapshotManager.start(latestMilestoneTracker);
         }
@@ -232,6 +238,8 @@ public class Iota {
         if (transactionPruner != null) {
             transactionPruner.init(tangle, snapshotProvider, spentAddressesService, spentAddressesProvider, tipsViewModel, configuration);
         }
+
+        quickTransactionSolidifier.init(configuration, tangle, snapshotProvider, latestMilestoneTracker, transactionValidator);
         neighborRouter.init(configuration, configuration, transactionRequester, txPipeline);
         txPipeline.init(neighborRouter, configuration, transactionValidator, tangle, snapshotProvider, tipsViewModel,
                 latestMilestoneTracker, transactionRequester);
@@ -299,6 +307,7 @@ public class Iota {
         neighborRouter.shutdown();
         transactionValidator.shutdown();
         tangle.shutdown();
+        quickTransactionSolidifier.shutdown();
 
         // free the resources of the snapshot provider last because all other instances need it
         snapshotProvider.shutdown();
