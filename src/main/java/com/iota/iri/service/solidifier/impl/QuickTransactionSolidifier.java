@@ -71,22 +71,22 @@ public class QuickTransactionSolidifier implements TransactionSolidifier {
                 return;
             }
             AtomicInteger updated = new AtomicInteger();
+            AtomicInteger traversed = new AtomicInteger();
             dagHelper.traverseApprovers(milestone.getHash(), tvm -> !Thread.currentThread().isInterrupted(), tvm -> {
                 try {
                     if (transactionValidator.quietQuickSetSolid(tvm)) {
                         tvm.update(tangle, snapshotProvider.getInitialSnapshot(), "solid|height");
                         updated.incrementAndGet();
                     }
+                    traversed.incrementAndGet();
                 } catch (Exception e) {
                     log.error("error while trying to quick set solid transaction {}. reason: {}", tvm.getHash(),
                             e.getMessage());
                 }
             });
-            if (updated.get() == 0) {
-                return;
-            }
 
-            log.info("updated {} transaction's solidity, took {} ms", updated.get(), System.currentTimeMillis() - start);
+            log.info("updated {} and traversed {} transactions, took {} ms", updated.get(), traversed.get(),
+                    System.currentTimeMillis() - start);
         } catch (Exception e) {
             log.error("error occurred during quick solidification run: {}", e.getMessage());
         }
