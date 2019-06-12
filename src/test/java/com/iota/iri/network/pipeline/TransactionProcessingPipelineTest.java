@@ -5,12 +5,10 @@ import com.iota.iri.conf.NodeConfig;
 import com.iota.iri.controllers.TipsViewModel;
 import com.iota.iri.network.NeighborRouter;
 import com.iota.iri.network.SampleTransaction;
-import com.iota.iri.network.TransactionRequester;
 import com.iota.iri.network.neighbor.Neighbor;
 import com.iota.iri.service.milestone.LatestMilestoneTracker;
 import com.iota.iri.service.snapshot.SnapshotProvider;
 import com.iota.iri.storage.Tangle;
-import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mock;
@@ -78,10 +76,10 @@ public class TransactionProcessingPipelineTest {
     private ProcessingContext divergeToReplyAndReceivedCtx;
 
     @Mock
-    private ProcessingContext<ReplyPayload> replyCtx;
+    private ProcessingContext replyCtx;
 
     @Mock
-    private ProcessingContext<ReceivedPayload> receivedCtx;
+    private ProcessingContext receivedCtx;
 
     @Mock
     private ProcessingContext broadcastCtx;
@@ -108,7 +106,7 @@ public class TransactionProcessingPipelineTest {
 
     @Test
     public void processingAValidNewTransactionFlowsThroughTheEntirePipeline() throws InterruptedException {
-        TransactionProcessingPipeline pipeline = new TransactionProcessingPipeline();
+        TransactionProcessingPipeline pipeline = new TransactionProcessingPipelineImpl();
         pipeline.init(neighborRouter, nodeConfig, transactionValidator, tangle, snapshotProvider, tipsViewModel,
                 latestMilestoneTracker);
 
@@ -124,12 +122,11 @@ public class TransactionProcessingPipelineTest {
         mockHashingStage(pipeline);
 
         // mock validation context/stage
-        ImmutablePair<ProcessingContext<ReplyPayload>,
-                ProcessingContext<ReceivedPayload>> divergePaypload = new ImmutablePair<>(replyCtx, receivedCtx);
+        MultiStagePayload divergePayload = new MultiStagePayload(replyCtx, receivedCtx);
         Mockito.when(validationStage.process(validationCtx)).thenReturn(divergeToReplyAndReceivedCtx);
         Mockito.when(divergeToReplyAndReceivedCtx.getNextStage())
                 .thenReturn(TransactionProcessingPipeline.Stage.MULTIPLE);
-        Mockito.when(divergeToReplyAndReceivedCtx.getPayload()).thenReturn(divergePaypload);
+        Mockito.when(divergeToReplyAndReceivedCtx.getPayload()).thenReturn(divergePayload);
 
         // mock received
         Mockito.when(broadcastCtx.getNextStage()).thenReturn(TransactionProcessingPipeline.Stage.BROADCAST);
@@ -154,7 +151,7 @@ public class TransactionProcessingPipelineTest {
 
     @Test
     public void processingAKnownTransactionOnlyFlowsToTheReplyStage() throws InterruptedException {
-        TransactionProcessingPipeline pipeline = new TransactionProcessingPipeline();
+        TransactionProcessingPipeline pipeline = new TransactionProcessingPipelineImpl();
         pipeline.init(neighborRouter, nodeConfig, transactionValidator, tangle, snapshotProvider, tipsViewModel,
                 latestMilestoneTracker);
 
@@ -188,7 +185,7 @@ public class TransactionProcessingPipelineTest {
     @Test
     public void processingAValidNewTransactionNotOriginatingFromANeighborFlowsThroughTheCorrectStages()
             throws InterruptedException {
-        TransactionProcessingPipeline pipeline = new TransactionProcessingPipeline();
+        TransactionProcessingPipeline pipeline = new TransactionProcessingPipelineImpl();
         pipeline.init(neighborRouter, nodeConfig, transactionValidator, tangle, snapshotProvider, tipsViewModel,
                 latestMilestoneTracker);
 
@@ -234,7 +231,7 @@ public class TransactionProcessingPipelineTest {
 
     @Test
     public void anInvalidNewTransactionStopsBeingProcessedAfterTheValidationStage() throws InterruptedException {
-        TransactionProcessingPipeline pipeline = new TransactionProcessingPipeline();
+        TransactionProcessingPipeline pipeline = new TransactionProcessingPipelineImpl();
         pipeline.init(neighborRouter, nodeConfig, transactionValidator, tangle, snapshotProvider, tipsViewModel,
                 latestMilestoneTracker);
 

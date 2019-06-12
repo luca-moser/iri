@@ -7,7 +7,7 @@ import java.nio.ByteBuffer;
 /**
  * Defines the payload which gets submitted to the {@link PreProcessStage}.
  */
-public class PreProcessPayload {
+public class PreProcessPayload extends Payload {
 
     private Neighbor neighbor;
     private ByteBuffer data;
@@ -24,11 +24,9 @@ public class PreProcessPayload {
     }
 
     /**
-     * Gets the {@link Neighbor}
-     * 
-     * @return the {@link Neighbor}
+     * {@inheritDoc}
      */
-    public Neighbor getNeighbor() {
+    public Neighbor getOriginNeighbor() {
         return neighbor;
     }
 
@@ -48,5 +46,10 @@ public class PreProcessPayload {
      */
     public ByteBuffer getData() {
         return data;
+    }
+
+    @Override
+    public String toString() {
+        return "PreProcessPayload{" + "neighbor=" + neighbor.getHostAddressAndPort() + '}';
     }
 }

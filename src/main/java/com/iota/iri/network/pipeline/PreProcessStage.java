@@ -9,8 +9,6 @@ import com.iota.iri.network.FIFOCache;
 import com.iota.iri.network.NeighborRouter;
 import com.iota.iri.network.protocol.Protocol;
 import com.iota.iri.utils.Converter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 
@@ -18,9 +16,7 @@ import java.nio.ByteBuffer;
  * The {@link PreProcessStage} expands truncated transaction gossip payloads, computes the digest of the payload and
  * converts the transaction to its trits representation.
  */
-public class PreProcessStage {
-
-    private static final Logger log = LoggerFactory.getLogger(PreProcessStage.class);
+public class PreProcessStage implements Stage {
 
     private FIFOCache<Long, Hash> recentlySeenBytesCache;
     private IotaConfig config;
@@ -57,8 +53,7 @@ public class PreProcessStage {
         Protocol.expandTx(data, txDataBytes);
 
         // copy requested hash
-        System.arraycopy(data, data.length - Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH, reqHashBytes, 0,
-                Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH);
+        Protocol.extractRequestedTxHash(data, reqHashBytes);
 
         if (config.getPreProcessSleepMillisec() > 0) {
             try {
@@ -69,7 +64,7 @@ public class PreProcessStage {
         }
 
         // increment all txs count
-        payload.getNeighbor().getMetrics().incrAllTransactionsCount();
+        payload.getOriginNeighbor().getMetrics().incrAllTransactionsCount();
 
         // compute digest of tx bytes data
         long txDigest = NeighborRouter.getTxCacheDigest(txDataBytes);
@@ -83,7 +78,7 @@ public class PreProcessStage {
             // reply with a random tip by setting the request hash to the null hash
             requestedHash = requestedHash.equals(receivedTxHash) ? Hash.NULL_HASH : requestedHash;
             ctx.setNextStage(TransactionProcessingPipeline.Stage.REPLY);
-            ctx.setPayload(new ReplyPayload(payload.getNeighbor(), requestedHash));
+            ctx.setPayload(new ReplyPayload(payload.getOriginNeighbor(), requestedHash));
             return ctx;
         }
 
@@ -93,7 +88,7 @@ public class PreProcessStage {
 
         // submit to hashing stage.
         ctx.setNextStage(TransactionProcessingPipeline.Stage.HASHING);
-        HashingPayload hashingStagePayload = new HashingPayload(payload.getNeighbor(), txTrits, txDigest,
+        HashingPayload hashingStagePayload = new HashingPayload(payload.getOriginNeighbor(), txTrits, txDigest,
                 requestedHash);
         ctx.setPayload(hashingStagePayload);
         return ctx;

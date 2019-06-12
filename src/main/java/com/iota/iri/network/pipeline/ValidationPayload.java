@@ -3,12 +3,12 @@ package com.iota.iri.network.pipeline;
 import com.iota.iri.model.Hash;
 import com.iota.iri.network.neighbor.Neighbor;
 
-import java.util.Optional;
+import java.util.Arrays;
 
 /**
  * Defines a payload whic gets submitted to the {@link ValidationStage}.
  */
-public class ValidationPayload {
+public class ValidationPayload extends Payload {
 
     private Neighbor neighbor;
     private byte[] txTrits;
@@ -35,12 +35,10 @@ public class ValidationPayload {
     }
 
     /**
-     * Gets the {@link Neighbor}
-     * 
-     * @return the neighbor
+     * {@inheritDoc}
      */
-    public Optional<Neighbor> getNeighbor() {
-        return neighbor == null ? Optional.empty() : Optional.of(neighbor);
+    public Neighbor getOriginNeighbor() {
+        return neighbor;
     }
 
     /**
@@ -57,8 +55,8 @@ public class ValidationPayload {
      * 
      * @return the transaction payload digest
      */
-    public Optional<Long> getTxBytesDigest() {
-        return txBytesDigest == null ? Optional.empty() : Optional.of(txBytesDigest);
+    public Long getTxBytesDigest() {
+        return txBytesDigest;
     }
 
     /**
@@ -66,8 +64,8 @@ public class ValidationPayload {
      * 
      * @return the hash of the requested transaction.
      */
-    public Optional<Hash> getHashOfRequestedTx() {
-        return hashOfRequestedTx == null ? Optional.empty() : Optional.of(hashOfRequestedTx);
+    public Hash getHashOfRequestedTx() {
+        return hashOfRequestedTx;
     }
 
     /**
@@ -86,5 +84,12 @@ public class ValidationPayload {
      */
     public void setHashTrits(byte[] hashTrits) {
         this.hashTrits = hashTrits;
+    }
+
+    @Override
+    public String toString() {
+        return "ValidationPayload{" + "neighbor=" + neighbor.getHostAddressAndPort() + ", hashTrits="
+                + Arrays.toString(hashTrits) + ", txBytesDigest=" + txBytesDigest + ", hashOfRequestedTx="
+                + hashOfRequestedTx.toString() + '}';
     }
 }

@@ -6,7 +6,7 @@ import com.iota.iri.network.neighbor.Neighbor;
 /**
  * Defines a payload which gets submitted to the {@link ReplyStage}.
  */
-public class ReplyPayload {
+public class ReplyPayload extends Payload {
 
     private Neighbor neighbor;
     private Hash hashOfRequestedTx;
@@ -23,18 +23,16 @@ public class ReplyPayload {
     }
 
     /**
-     * Gets the {@link Neighbor}.
-     * 
-     * @return the neighbor
+     * {@inheritDoc}
      */
-    public Neighbor getNeighbor() {
+    public Neighbor getOriginNeighbor() {
         return neighbor;
     }
 
     /**
      * Sets the {@link Neighbor}.
      * 
-     * @param neighbor
+     * @param neighbor the neighbor to set
      */
     public void setNeighbor(Neighbor neighbor) {
         this.neighbor = neighbor;
@@ -47,5 +45,11 @@ public class ReplyPayload {
      */
     public Hash getHashOfRequestedTx() {
         return hashOfRequestedTx;
+    }
+
+    @Override
+    public String toString() {
+        return "ReplyPayload{" + "neighbor=" + neighbor.getHostAddressAndPort() + ", hashOfRequestedTx="
+                + hashOfRequestedTx.toString() + '}';
     }
 }
