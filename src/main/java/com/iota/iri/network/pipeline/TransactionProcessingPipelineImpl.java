@@ -1,6 +1,7 @@
 package com.iota.iri.network.pipeline;
 
 import com.iota.iri.TransactionValidator;
+import com.iota.iri.conf.IotaConfig;
 import com.iota.iri.conf.NodeConfig;
 import com.iota.iri.controllers.TipsViewModel;
 import com.iota.iri.crypto.batched.BatchedHasher;
@@ -71,11 +72,11 @@ public class TransactionProcessingPipelineImpl implements TransactionProcessingP
     private BlockingQueue<ProcessingContext> replyStageQueue = new ArrayBlockingQueue<>(100);
 
     @Override
-    public void init(NeighborRouter neighborRouter, NodeConfig config, TransactionValidator txValidator, Tangle tangle,
-            SnapshotProvider snapshotProvider, TipsViewModel tipsViewModel,
-            LatestMilestoneTracker latestMilestoneTracker) {
+    public void init(NeighborRouter neighborRouter, IotaConfig config, TransactionValidator txValidator, Tangle tangle,
+                     SnapshotProvider snapshotProvider, TipsViewModel tipsViewModel,
+                     LatestMilestoneTracker latestMilestoneTracker) {
         FIFOCache<Long, Hash> recentlySeenBytesCache = new FIFOCache<>(config.getCacheSizeBytes());
-        this.preProcessStage = new PreProcessStage(recentlySeenBytesCache);
+        this.preProcessStage = new PreProcessStage(recentlySeenBytesCache, config);
         this.replyStage = new ReplyStage(neighborRouter, config, tangle, tipsViewModel, latestMilestoneTracker,
                 snapshotProvider, recentlySeenBytesCache);
         this.broadcastStage = new BroadcastStage(neighborRouter);

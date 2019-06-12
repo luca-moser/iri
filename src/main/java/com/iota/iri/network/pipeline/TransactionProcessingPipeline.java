@@ -39,7 +39,7 @@ public interface TransactionProcessingPipeline {
      * @param latestMilestoneTracker The {@link LatestMilestoneTracker} to load the latest milestone hash from in the
      *                               reply stage
      */
-    void init(NeighborRouter neighborRouter, NodeConfig config, TransactionValidator txValidator, Tangle tangle,
+    void init(NeighborRouter neighborRouter, IotaConfig config, TransactionValidator txValidator, Tangle tangle,
             SnapshotProvider snapshotProvider, TipsViewModel tipsViewModel,
             LatestMilestoneTracker latestMilestoneTracker);
 
