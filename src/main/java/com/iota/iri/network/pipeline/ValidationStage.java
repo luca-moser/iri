@@ -39,6 +39,7 @@ public class ValidationStage implements Stage {
      *         {@link ReceivedStage} and {@link ReplyStage}, depending on whether the transaction came from a neighbor
      *         or not
      */
+    @Override
     public ProcessingContext process(ProcessingContext ctx) {
         ValidationPayload payload = (ValidationPayload) ctx.getPayload();
         byte[] hashTrits = payload.getHashTrits();
@@ -55,7 +56,7 @@ public class ValidationStage implements Stage {
             txValidator.runValidation(tvm, txValidator.getMinWeightMagnitude());
         } catch (TransactionValidator.StaleTimestampException ex) {
             if (originNeighbor != null) {
-                originNeighbor.getMetrics().incrSentTransactionsCount();
+                originNeighbor.getMetrics().incrStaleTransactionsCount();
             }
             ctx.setNextStage(TransactionProcessingPipeline.Stage.ABORT);
             return ctx;

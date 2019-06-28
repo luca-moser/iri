@@ -12,6 +12,9 @@ import net.openhft.hashing.LongHashFunction;
 
 import java.nio.ByteBuffer;
 
+/**
+ * A sample transaction for network code related tests.
+ */
 public class SampleTransaction {
 
     public final static int SIG_FILL = 4;
@@ -45,6 +48,11 @@ public class SampleTransaction {
         SAMPLE_TRANSACTION.parsed = true;
     }
 
+    /**
+     * Creates a byte buffer containing a sample transaction.
+     * 
+     * @return a byte buffer containing a sample transaction
+     */
     public static ByteBuffer createSampleTxBuffer() {
         int size = ProtocolMessage.TRANSACTION_GOSSIP.getMaxLength();
         ByteBuffer buf = ByteBuffer.allocate(size);

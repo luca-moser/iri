@@ -4,11 +4,12 @@ import com.iota.iri.conf.IotaConfig;
 import com.iota.iri.controllers.TransactionViewModel;
 import com.iota.iri.model.Hash;
 import com.iota.iri.model.HashFactory;
-import com.iota.iri.model.persistables.Transaction;
 import com.iota.iri.network.FIFOCache;
 import com.iota.iri.network.NeighborRouter;
 import com.iota.iri.network.protocol.Protocol;
 import com.iota.iri.utils.Converter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 
@@ -18,6 +19,7 @@ import java.nio.ByteBuffer;
  */
 public class PreProcessStage implements Stage {
 
+    private static final Logger log = LoggerFactory.getLogger(PreProcessStage.class);
     private FIFOCache<Long, Hash> recentlySeenBytesCache;
     private IotaConfig config;
 
@@ -40,20 +42,16 @@ public class PreProcessStage implements Stage {
      * @return a {@link ProcessingContext} which either redirects to the {@link ReplyStage} or {@link HashingStage}
      *         depending on whether the transaction is known
      */
+    @Override
     public ProcessingContext process(ProcessingContext ctx) {
         PreProcessPayload payload = (PreProcessPayload) ctx.getPayload();
         ByteBuffer packetData = payload.getData();
         byte[] data = packetData.array();
 
-        // allocate buffers for tx payload and requested tx hash
-        byte[] txDataBytes = new byte[Transaction.SIZE];
-        byte[] reqHashBytes = new byte[Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH];
-
         // expand received tx data
-        Protocol.expandTx(data, txDataBytes);
-
-        // copy requested hash
-        Protocol.extractRequestedTxHash(data, reqHashBytes);
+        byte[] txDataBytes = Protocol.expandTx(data);
+        // copy requested tx hash
+        byte[] reqHashBytes = Protocol.extractRequestedTxHash(data);
 
         if (config.getPreProcessSleepMillisec() > 0) {
             try {
@@ -72,6 +70,16 @@ public class PreProcessStage implements Stage {
         Hash receivedTxHash = recentlySeenBytesCache.get(txDigest);
         Hash requestedHash = HashFactory.TRANSACTION.create(reqHashBytes, 0,
                 Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH);
+
+        // log cache hit/miss ratio every 50k get()s
+        if (log.isDebugEnabled()) {
+            long hits = recentlySeenBytesCache.getCacheHits();
+            long misses = recentlySeenBytesCache.getCacheMisses();
+            if ((hits + misses) % 50000L == 0) {
+                log.debug("recently seen bytes cache hit/miss ratio: {}/{}", hits, misses);
+                recentlySeenBytesCache.resetCacheStats();
+            }
+        }
 
         // received tx is known, therefore we can submit to the reply stage directly.
         if (receivedTxHash != null) {

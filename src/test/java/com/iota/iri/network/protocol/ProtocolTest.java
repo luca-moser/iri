@@ -71,14 +71,14 @@ public class ProtocolTest {
         char ownSourcePort = (char) 15600;
         long now = System.currentTimeMillis();
         byte[] byteEncodedCooAddress = Hash.NULL_HASH.bytes();
-        ByteBuffer buf = Protocol.createHandshakePacket(ownSourcePort, byteEncodedCooAddress, (byte) 1);
+        ByteBuffer buf = Handshake.createHandshakePacket(ownSourcePort, byteEncodedCooAddress, (byte) 1);
         assertEquals("should be of type handshake message", ProtocolMessage.HANDSHAKE.getTypeID(), buf.get());
         int maxLength = ProtocolMessage.HANDSHAKE.getMaxLength();
         assertEquals("should have correct length",
                 (maxLength - (maxLength - 60) + Protocol.SUPPORTED_PROTOCOL_VERSIONS.length), buf.getShort());
         assertEquals("should resolve to the correct source port", ownSourcePort, buf.getChar());
-        assertTrue(now <= buf.getLong());
-        byte[] actualCooAddress = new byte[Protocol.BYTE_ENCODED_COO_ADDRESS_BYTES_LENGTH];
+        assertTrue("timestamp in handshake packet should be same age or newer than timestamp",now <= buf.getLong());
+        byte[] actualCooAddress = new byte[Handshake.BYTE_ENCODED_COO_ADDRESS_BYTES_LENGTH];
         buf.get(actualCooAddress);
         assertArrayEquals("should resolve to the correct coo address", byteEncodedCooAddress, actualCooAddress);
         assertEquals("mwm should be correct", 1, buf.get());
@@ -123,8 +123,7 @@ public class ProtocolTest {
         for (int i = 0; i < truncatedSize; i++) {
             truncatedTxData[i] = 3;
         }
-        byte[] expandedTxData = new byte[Transaction.SIZE];
-        Protocol.expandTx(truncatedTxData, expandedTxData);
+        byte[] expandedTxData = Protocol.expandTx(truncatedTxData);
 
         // stuff after signature message fragment should be intact
         for (int i = expandedTxData.length - 1; i >= Protocol.SIG_DATA_MAX_BYTES_LENGTH; i--) {

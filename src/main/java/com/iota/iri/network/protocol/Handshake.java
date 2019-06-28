@@ -10,6 +10,11 @@ import java.nio.ByteBuffer;
 public class Handshake {
 
     /**
+     * The amount of bytes used for the coo address sent in a handshake packet.
+     */
+    public final static int BYTE_ENCODED_COO_ADDRESS_BYTES_LENGTH = 49;
+
+    /**
      * The state of the handshaking.
      */
     public enum State {
@@ -24,6 +29,27 @@ public class Handshake {
     private byte[] supportedVersions;
 
     /**
+     * Creates a new handshake packet.
+     *
+     * @param ownSourcePort the node's own server socket port number
+     * @return a {@link ByteBuffer} containing the handshake packet
+     */
+    public static ByteBuffer createHandshakePacket(char ownSourcePort, byte[] ownByteEncodedCooAddress,
+                                                   byte ownUsedMWM) {
+        short maxLength = ProtocolMessage.HANDSHAKE.getMaxLength();
+        final short payloadLengthBytes = (short) (maxLength - (maxLength - 60) + Protocol.SUPPORTED_PROTOCOL_VERSIONS.length);
+        ByteBuffer buf = ByteBuffer.allocate(ProtocolMessage.HEADER.getMaxLength() + payloadLengthBytes);
+        Protocol.addProtocolHeader(buf, ProtocolMessage.HANDSHAKE, payloadLengthBytes);
+        buf.putChar(ownSourcePort);
+        buf.putLong(System.currentTimeMillis());
+        buf.put(ownByteEncodedCooAddress);
+        buf.put(ownUsedMWM);
+        buf.put(Protocol.SUPPORTED_PROTOCOL_VERSIONS);
+        buf.flip();
+        return buf;
+    }
+
+    /**
      * Parses the given message into a {@link Handshake} object.
      * 
      * @param msg the buffer containing the handshake info
@@ -33,7 +59,7 @@ public class Handshake {
         Handshake handshake = new Handshake();
         handshake.setServerSocketPort((int) msg.getChar());
         handshake.setSentTimestamp(msg.getLong());
-        byte[] byteEncodedCooAddress = new byte[Protocol.BYTE_ENCODED_COO_ADDRESS_BYTES_LENGTH];
+        byte[] byteEncodedCooAddress = new byte[BYTE_ENCODED_COO_ADDRESS_BYTES_LENGTH];
         msg.get(byteEncodedCooAddress);
         handshake.setByteEncodedCooAddress(byteEncodedCooAddress);
         handshake.setMWM(msg.get());
@@ -161,7 +187,7 @@ public class Handshake {
      * @return a positive integer defining the highest supported protocol version and a negative integer indicating the
      *         highest supported version by the given neighbor but which is not supported by us
      */
-    public int isNeighborSupported(byte[] ownSupportedVersions) {
+    public int getNeighborSupportedVersion(byte[] ownSupportedVersions) {
         int highestSupportedVersion = 0;
         for (int i = 0; i < ownSupportedVersions.length; i++) {
             // max check up to advertised versions by the neighbor

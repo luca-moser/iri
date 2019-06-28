@@ -4,7 +4,6 @@ import com.iota.iri.TransactionValidator;
 import com.iota.iri.conf.IotaConfig;
 import com.iota.iri.conf.NodeConfig;
 import com.iota.iri.controllers.TipsViewModel;
-import com.iota.iri.crypto.batched.BatchedHasher;
 import com.iota.iri.network.NeighborRouter;
 import com.iota.iri.network.neighbor.Neighbor;
 import com.iota.iri.service.milestone.LatestMilestoneTracker;
@@ -12,7 +11,6 @@ import com.iota.iri.service.snapshot.SnapshotProvider;
 import com.iota.iri.storage.Tangle;
 
 import java.nio.ByteBuffer;
-import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
 /**

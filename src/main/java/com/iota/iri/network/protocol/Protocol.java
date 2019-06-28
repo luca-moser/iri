@@ -1,6 +1,7 @@
 package com.iota.iri.network.protocol;
 
 import com.iota.iri.controllers.TransactionViewModel;
+import com.iota.iri.model.persistables.Transaction;
 
 import java.nio.ByteBuffer;
 
@@ -13,6 +14,7 @@ public class Protocol {
      * The protocol version used by this node.
      */
     public final static byte PROTOCOL_VERSION = 1;
+
     /*
      * <p>
      * The supported protocol versions by this node. Bitmasks are used to denote what protocol version this node
@@ -54,10 +56,6 @@ public class Protocol {
      */
     public final static int GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH = 49;
     /**
-     * The amount of bytes used for the coo address sent in a handshake packet.
-     */
-    public final static int BYTE_ENCODED_COO_ADDRESS_BYTES_LENGTH = 49;
-    /**
      * The amount of bytes making up the non signature message fragment part of a transaction gossip payload.
      */
     public final static int NON_SIG_TX_PART_BYTES_LENGTH = 292;
@@ -96,27 +94,6 @@ public class Protocol {
     }
 
     /**
-     * Creates a new handshake packet.
-     * 
-     * @param ownSourcePort the node's own server socket port number
-     * @return a {@link ByteBuffer} containing the handshake packet
-     */
-    public static ByteBuffer createHandshakePacket(char ownSourcePort, byte[] ownByteEncodedCooAddress,
-            byte ownUsedMWM) {
-        short maxLength = ProtocolMessage.HANDSHAKE.getMaxLength();
-        final short payloadLengthBytes = (short) (maxLength - (maxLength - 60) + SUPPORTED_PROTOCOL_VERSIONS.length);
-        ByteBuffer buf = ByteBuffer.allocate(ProtocolMessage.HEADER.getMaxLength() + payloadLengthBytes);
-        addProtocolHeader(buf, ProtocolMessage.HANDSHAKE, payloadLengthBytes);
-        buf.putChar(ownSourcePort);
-        buf.putLong(System.currentTimeMillis());
-        buf.put(ownByteEncodedCooAddress);
-        buf.put(ownUsedMWM);
-        buf.put(SUPPORTED_PROTOCOL_VERSIONS);
-        buf.flip();
-        return buf;
-    }
-
-    /**
      * Creates a new transaction gossip packet.
      * 
      * @param tvm           The transaction to add into the packet
@@ -140,7 +117,7 @@ public class Protocol {
      * @param buf      the {@link ByteBuffer} to write into.
      * @param protoMsg the message type which will be sent
      */
-    private static void addProtocolHeader(ByteBuffer buf, ProtocolMessage protoMsg) {
+    public static void addProtocolHeader(ByteBuffer buf, ProtocolMessage protoMsg) {
         addProtocolHeader(buf, protoMsg, protoMsg.getMaxLength());
     }
 
@@ -151,7 +128,7 @@ public class Protocol {
      * @param protoMsg           the message type which will be sent
      * @param payloadLengthBytes the message length
      */
-    private static void addProtocolHeader(ByteBuffer buf, ProtocolMessage protoMsg, short payloadLengthBytes) {
+    public static void addProtocolHeader(ByteBuffer buf, ProtocolMessage protoMsg, short payloadLengthBytes) {
         buf.put(protoMsg.getTypeID());
         buf.putShort(payloadLengthBytes);
     }
@@ -159,10 +136,10 @@ public class Protocol {
     /**
      * Expands a truncated bytes encoded transaction payload.
      * 
-     * @param data        the source data
-     * @param txDataBytes the array to expand the transaction into
+     * @param data the source data
      */
-    public static void expandTx(byte[] data, byte[] txDataBytes) {
+    public static byte[] expandTx(byte[] data) {
+        byte[] txDataBytes = new byte[Transaction.SIZE];
         // we need to expand the tx data (signature message fragment) as
         // it could have been truncated for transmission
         int numOfBytesOfSigMsgFragToExpand = ProtocolMessage.TRANSACTION_GOSSIP.getMaxLength() - data.length;
@@ -175,6 +152,7 @@ public class Protocol {
         System.arraycopy(sigMsgFragPadding, 0, txDataBytes, sigMsgFragBytesToCopy, sigMsgFragPadding.length);
         System.arraycopy(data, sigMsgFragBytesToCopy, txDataBytes, Protocol.SIG_DATA_MAX_BYTES_LENGTH,
                 Protocol.NON_SIG_TX_PART_BYTES_LENGTH);
+        return txDataBytes;
     }
 
     /**
@@ -205,11 +183,12 @@ public class Protocol {
      * array.
      * 
      * @param source the transaction gossip packet data
-     * @param dest   the destination array to write the requested transaction hash into
      */
-    public static void extractRequestedTxHash(byte[] source, byte[] dest) {
-        System.arraycopy(source, source.length - Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH, dest, 0,
+    public static byte[] extractRequestedTxHash(byte[] source) {
+        byte[] reqHashBytes = new byte[Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH];
+        System.arraycopy(source, source.length - Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH, reqHashBytes, 0,
                 Protocol.GOSSIP_REQUESTED_TX_HASH_BYTES_LENGTH);
+        return reqHashBytes;
     }
 
 }
