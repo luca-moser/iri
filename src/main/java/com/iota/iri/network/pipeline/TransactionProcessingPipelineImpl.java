@@ -54,8 +54,6 @@ public class TransactionProcessingPipelineImpl implements TransactionProcessingP
     private static final Logger log = LoggerFactory.getLogger(TransactionProcessingPipelineImpl.class);
     private ExecutorService stagesThreadPool = Executors.newFixedThreadPool(6);
 
-    private final AtomicBoolean shutdown = new AtomicBoolean(false);
-
     // stages of the protocol protocol
     private PreProcessStage preProcessStage;
     private ReceivedStage receivedStage;
@@ -107,7 +105,7 @@ public class TransactionProcessingPipelineImpl implements TransactionProcessingP
             com.iota.iri.network.pipeline.Stage stage) {
         stagesThreadPool.submit(new Thread(() -> {
             try {
-                while (!shutdown.get()) {
+                while (!Thread.currentThread().isInterrupted()) {
                     ProcessingContext ctx = stage.process(queue.take());
                     switch (ctx.getNextStage()) {
                         case REPLY:
@@ -136,7 +134,7 @@ public class TransactionProcessingPipelineImpl implements TransactionProcessingP
                     }
                 }
             } catch (InterruptedException e) {
-
+                Thread.currentThread().interrupt();
             } finally {
                 log.info("{}-stage shutdown", name);
             }
@@ -206,7 +204,6 @@ public class TransactionProcessingPipelineImpl implements TransactionProcessingP
 
     @Override
     public void shutdown() {
-        shutdown.set(true);
         stagesThreadPool.shutdownNow();
     }
 
