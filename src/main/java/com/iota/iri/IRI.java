@@ -43,7 +43,7 @@ import org.slf4j.LoggerFactory;
 public class IRI {
 
     public static final String MAINNET_NAME = "IRI";
-    public static final String TESTNET_NAME = "IRI Testnet";
+    public static final String TESTNET_NAME = "IRI ICC 0.1.33";
 
     /**
      * The entry point of IRI.

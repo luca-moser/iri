@@ -7,6 +7,7 @@ fi
 
 exec java \
   $JAVA_OPTIONS \
+  -agentpath:/usr/local/YourKit-JavaProfiler-2019.1/bin/linux-x86-64/libyjpagent.so=port=$YOURKIT_PROFILER_PORT,listen=all \
   -Xms$JAVA_MIN_MEMORY \
   -Xmx$JAVA_MAX_MEMORY \
   -Djava.net.preferIPv4Stack=true \
